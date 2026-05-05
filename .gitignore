@@ -1,0 +1,39 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Env
+.env
+.env.local
+
+# SQLite local
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node/Next
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# Logs
+*.log
+
+# Manual da marca (material proprietário, não versionado)
+*Manual da Marca*.pdf
+
+# Backups
+*.bak
+*.swp

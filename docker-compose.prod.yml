@@ -1,0 +1,30 @@
+# Stack de produção puxando imagens do GHCR.
+# IMAGE_TAG=0.1.0 docker compose -f docker-compose.prod.yml up -d   # default: latest
+
+services:
+  backend:
+    image: ghcr.io/alexzerabr/casa-granum-backend:${IMAGE_TAG:-latest}
+    container_name: casagranum-backend
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  frontend:
+    image: ghcr.io/alexzerabr/casa-granum-frontend:${IMAGE_TAG:-latest}
+    container_name: casagranum-frontend
+    env_file: .env
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_started
+    restart: unless-stopped

@@ -1,0 +1,18 @@
+# root-level dockerignore — só usado se algum build for executado a partir da raiz.
+# Builds reais usam contextos separados (backend/, frontend/) com seus próprios .dockerignore.
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+node_modules
+__pycache__
+.venv
+venv
+data
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+README.md
+*.md

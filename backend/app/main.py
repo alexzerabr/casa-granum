@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -7,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.db.firebird import ping as firebird_ping
 from app.db.sqlite import init_db
+from app.modules.monitor import checker, scan_state
 from app.modules.monitor.scheduler import start_scheduler, stop_scheduler
 from app.routers import pedidos, reabastecimento, recomendacoes
 
@@ -20,6 +22,9 @@ logging.basicConfig(
 async def lifespan(_: FastAPI):
     await init_db()
     start_scheduler()
+    asyncio.create_task(
+        scan_state.executar(checker.executar_verificacao, origem="auto")
+    )
     yield
     stop_scheduler()
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, CheckCircle2, Database, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { ReabastecimentoTable } from "@/components/ReabastecimentoTable";
@@ -12,13 +12,16 @@ import {
   filtrosAtivos,
   FILTROS_VAZIOS,
   listarReabastecimento,
+  statusVarredura,
   type SumarioVerificacao,
   unidadesDisponiveis,
   type FiltrosReabastecimento,
   type ItemReabastecimento,
 } from "@/lib/reabastecimento";
 
-const POLL_INTERVAL = 60_000;
+const POLL_LISTA_MS = 60_000;
+const POLL_STATUS_RUN_MS = 2_000;
+const POLL_STATUS_IDLE_MS = 30_000;
 const TOAST_DURATION = 6_000;
 
 export default function ReabastecimentoPage() {
@@ -26,6 +29,7 @@ export default function ReabastecimentoPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+  const [origemRun, setOrigemRun] = useState<"auto" | "manual" | null>(null);
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState<Date | null>(null);
   const [fonte, setFonte] = useState<"cache" | "ao-vivo">("cache");
   const [sumario, setSumario] = useState<SumarioVerificacao | null>(null);
@@ -33,6 +37,9 @@ export default function ReabastecimentoPage() {
     ...FILTROS_VAZIOS,
     unidades: new Set<string>(),
   });
+
+  const runningRef = useRef(running);
+  runningRef.current = running;
 
   const carregar = useCallback(
     async (origem: "cache" | "ao-vivo" = "cache") => {
@@ -51,15 +58,56 @@ export default function ReabastecimentoPage() {
     [],
   );
 
+  // Polling do /status — sincroniza spinner com backend (sobrevive a F5).
+  useEffect(() => {
+    let cancelado = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const tick = async () => {
+      if (cancelado) return;
+      try {
+        const st = await statusVarredura();
+        const eraRunning = runningRef.current;
+        setRunning(st.em_execucao);
+        setOrigemRun(st.origem);
+        if (eraRunning && !st.em_execucao) {
+          // Transição executando → idle: refletir resultado.
+          await carregar("ao-vivo");
+          if (st.ultimo_sumario) setSumario(st.ultimo_sumario);
+        }
+      } catch {
+        // Falha transitória de rede — mantém estado anterior, próximo tick tenta de novo.
+      } finally {
+        if (!cancelado) {
+          const proximo = runningRef.current
+            ? POLL_STATUS_RUN_MS
+            : POLL_STATUS_IDLE_MS;
+          timeoutId = setTimeout(tick, proximo);
+        }
+      }
+    };
+
+    void tick();
+    return () => {
+      cancelado = true;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [carregar]);
+
+  // Polling da lista (mais lento, independente do status).
   useEffect(() => {
     void carregar("cache");
-    const id = setInterval(() => void carregar("cache"), POLL_INTERVAL);
+    const id = setInterval(() => {
+      if (!runningRef.current) void carregar("cache");
+    }, POLL_LISTA_MS);
     return () => clearInterval(id);
   }, [carregar]);
 
   const handleRunNow = async () => {
+    if (running) return;
     setRunning(true);
     setSumario(null);
+    setOrigemRun("manual");
     try {
       const resultado = await executarVerificacao();
       await carregar("ao-vivo");
@@ -97,13 +145,18 @@ export default function ReabastecimentoPage() {
     [itens],
   );
 
+  const labelBotao = running
+    ? origemRun === "auto"
+      ? "Varredura automática…"
+      : "Consultando…"
+    : "Verificar agora";
+
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
 
       <main className="flex-1">
         <section className="mx-auto max-w-6xl px-6 pb-16 pt-10 lg:px-10">
-          {/* Hero: título + status à esquerda · ações à direita */}
           <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
             <div>
               <p className="label mb-2">Aba 2 · Reabastecimento</p>
@@ -131,16 +184,17 @@ export default function ReabastecimentoPage() {
                 disabled={running}
                 className="btn btn-secondary"
                 aria-live="polite"
+                aria-busy={running}
               >
                 {running ? (
                   <>
                     <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-inkmuted/30 border-t-ink" />
-                    Consultando…
+                    {labelBotao}
                   </>
                 ) : (
                   <>
                     <RefreshCw className="h-4 w-4" strokeWidth={2} />
-                    Verificar agora
+                    {labelBotao}
                   </>
                 )}
               </button>
@@ -157,7 +211,6 @@ export default function ReabastecimentoPage() {
             </div>
           </div>
 
-          {/* Toast de conclusão da verificação manual */}
           {sumario && !running && (
             <div
               role="status"
@@ -194,7 +247,6 @@ export default function ReabastecimentoPage() {
             </div>
           )}
 
-          {/* Filtros */}
           {!loading && !error && itens.length > 0 && (
             <div className="mb-6">
               <ReabastecimentoFiltros
@@ -209,7 +261,10 @@ export default function ReabastecimentoPage() {
 
           {loading && (
             <p className="py-16 text-center text-sm text-inkdim">
-              Carregando<span className="dots text-copper" />
+              {running
+                ? "Aguardando primeira varredura concluir"
+                : "Carregando"}
+              <span className="dots text-copper" />
             </p>
           )}
 
@@ -256,7 +311,7 @@ export default function ReabastecimentoPage() {
             />
           )}
 
-          {!loading && !error && itens.length === 0 && (
+          {!loading && !error && itens.length === 0 && !running && (
             <div className="mt-8 rounded-md border border-wheat bg-cream px-6 py-6 text-sm leading-relaxed text-inkdim">
               <p className="label mb-2">Como ativar o monitoramento</p>
               <p>
@@ -267,7 +322,7 @@ export default function ReabastecimentoPage() {
                 estoque mínimo preenchido (
                 <code className="font-mono text-ink">PRO_EMN</code> maior que
                 zero, na unidade de venda do produto). A próxima verificação
-                automática (a cada 30 min) já incluirá o produto.
+                automática já incluirá o produto.
               </p>
             </div>
           )}

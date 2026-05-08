@@ -147,3 +147,17 @@ export async function executarVerificacao(): Promise<SumarioVerificacao> {
   });
   return handle<SumarioVerificacao>(res);
 }
+
+export interface StatusVarredura {
+  em_execucao: boolean;
+  iniciado_em: string | null;
+  origem: "auto" | "manual" | null;
+  ultimo_sumario: SumarioVerificacao | null;
+}
+
+export async function statusVarredura(): Promise<StatusVarredura> {
+  const res = await fetch(`${BACKEND_URL}/reabastecimento/status`, {
+    cache: "no-store",
+  });
+  return handle<StatusVarredura>(res);
+}

@@ -1,4 +1,4 @@
-"""GET /reabastecimento + POST /reabastecimento/run (manual trigger)."""
+"""GET /reabastecimento + POST /reabastecimento/run (manual trigger) + GET /reabastecimento/status."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.config import settings
-from app.modules.monitor import checker
+from app.modules.monitor import checker, scan_state
 
 router = APIRouter(prefix="/reabastecimento", tags=["reabastecimento"])
 
@@ -35,6 +35,13 @@ class SumarioVerificacao(BaseModel):
     repostos: int
     em_alerta: int
     executado_em: str
+
+
+class StatusVarredura(BaseModel):
+    em_execucao: bool
+    iniciado_em: str | None
+    origem: str | None
+    ultimo_sumario: SumarioVerificacao | None
 
 
 def _calcular_nivel(atual: float | None, minimo: float) -> str:
@@ -81,6 +88,12 @@ async def listar() -> list[ItemReabastecimento]:
 
 @router.post("/run", response_model=SumarioVerificacao)
 async def executar_agora() -> SumarioVerificacao:
-    """Trigger manual da verificação. Útil pra testar sem esperar o intervalo."""
-    sumario = await asyncio.to_thread(checker.executar_verificacao)
+    """Trigger manual; serializa com varredura em curso via scan_state.executar."""
+    sumario = await scan_state.executar(checker.executar_verificacao, origem="manual")
     return SumarioVerificacao(**sumario)
+
+
+@router.get("/status", response_model=StatusVarredura)
+async def status_varredura() -> StatusVarredura:
+    """Estado da varredura — frontend usa pra restaurar spinner após F5 / boot do servidor."""
+    return StatusVarredura(**scan_state.estado())

@@ -9,7 +9,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from app.config import settings
-from app.modules.monitor import checker
+from app.modules.monitor import checker, scan_state
 from app.modules.recommendations import catalog
 
 logger = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ _scheduler: AsyncIOScheduler | None = None
 
 async def _job_monitor() -> None:
     try:
-        await asyncio.to_thread(checker.executar_verificacao)
+        await scan_state.executar(checker.executar_verificacao, origem="auto")
     except Exception:
         logger.exception("falha na execução do monitor")
 

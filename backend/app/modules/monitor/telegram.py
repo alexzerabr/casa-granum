@@ -14,23 +14,27 @@ logger = logging.getLogger(__name__)
 
 
 def _formatar_mensagem(produto: dict) -> str:
-    und_compra = produto.get("unidade") or "KG"  # PRO_UNDE
-    und_venda = produto.get("unidade_venda") or und_compra  # PRO_UND
-    sufixo_unidades = (
-        f"unidade: {und_compra}"
+    und_compra = produto.get("unidade") or "KG"
+    und_venda = produto.get("unidade_venda") or und_compra
+    linha_unidade = (
+        f"Unidade: {und_compra}"
         if und_compra == und_venda
-        else f"compra: {und_compra} · venda: {und_venda}"
+        else f"Compra: {und_compra} · Venda: {und_venda}"
     )
-    return (
-        "🔴 *Estoque Mínimo Atingido — Casa Granum*\n\n"
-        f"📦 Produto: *{produto['pro_des']}*\n"
-        f"📁 Grupo: {produto.get('grupo') or '—'}\n"
-        f"📐 {sufixo_unidades}\n"
-        f"⚖️ Estoque atual: {formatar(produto['estoque_atual_kg'], und_venda)}\n"
-        f"🎯 Estoque mínimo: {formatar(produto['estoque_min_kg'], und_venda)}\n"
-        f"🛒 Qtd. sugerida de reposição: {formatar(produto.get('qtd_reposicao') or 0, und_compra)}\n\n"
-        "➡️ Item incluído na Lista de Reabastecimento."
-    )
+    linhas = [
+        "🔴 *Estoque Mínimo Atingido — Casa Granum*",
+        "",
+        f"Produto: *{produto['pro_des']}*",
+        f"Grupo: {produto.get('grupo') or '—'}",
+        linha_unidade,
+        f"Estoque atual: {formatar(produto['estoque_atual_kg'], und_venda)}",
+        f"Estoque mínimo: {formatar(produto['estoque_min_kg'], und_venda)}",
+    ]
+    qtd_rep = produto.get("qtd_reposicao") or 0
+    if qtd_rep > 0:
+        linhas.append(f"Qtd. sugerida de reposição: {formatar(qtd_rep, und_compra)}")
+    linhas.extend(["", "Item incluído na Lista de Reabastecimento."])
+    return "\n".join(linhas)
 
 
 def enviar_alerta(produto: dict) -> bool:

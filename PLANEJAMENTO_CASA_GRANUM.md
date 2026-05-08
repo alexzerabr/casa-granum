@@ -163,7 +163,7 @@ Exibir em tempo real os produtos com estoque abaixo do mínimo configurado. Quan
 2. **Alerta único:** ao entrar na lista, envia alerta Telegram uma única vez. Nenhum novo alerta até reposição.
 3. **Critério de saída da lista:** `PRO_QTD > CAST(PRO_MIA AS DECIMAL) * fator_reposicao`
    - Fator padrão: `1.5`
-4. **Verificação periódica:** a cada 30 minutos (configurável)
+4. **Verificação periódica:** a cada 5 minutos (configurável via `MONITOR_INTERVAL_MINUTES`); cooldown de 24 h por produto evita re-disparo de Telegram em restarts
 5. A lista exibe apenas os itens **atualmente pendentes**, sem histórico
 
 ### O que exibir na interface (por produto)
@@ -605,4 +605,4 @@ Para que um produto seja monitorado pela aplicação:
 1. Abrir cadastro do produto no Nutify PDV
 2. Habilitar flag de estoque mínimo → `PRO_MIX = 'S'`
 3. Preencher o valor mínimo em KG → `PRO_MIA = "1.500"` (por exemplo)
-4. Salvar — na próxima verificação (até 30 minutos), o produto já entra no monitoramento
+4. Salvar — na próxima verificação (até 5 minutos por padrão), o produto já entra no monitoramento; o catálogo da IA também é atualizado em até 60 s

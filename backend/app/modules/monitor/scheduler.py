@@ -1,4 +1,4 @@
-"""Roda o monitor em background a cada N minutos."""
+"""Jobs em background: monitor de estoque e refresh do catálogo da IA."""
 
 from __future__ import annotations
 
@@ -10,17 +10,22 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from app.config import settings
 from app.modules.monitor import checker
+from app.modules.recommendations import catalog
 
 logger = logging.getLogger(__name__)
 
 _scheduler: AsyncIOScheduler | None = None
 
 
-async def _job() -> None:
+async def _job_monitor() -> None:
     try:
         await asyncio.to_thread(checker.executar_verificacao)
     except Exception:
         logger.exception("falha na execução do monitor")
+
+
+async def _job_catalog_refresh() -> None:
+    await asyncio.to_thread(catalog.refresh_em_background)
 
 
 def start_scheduler() -> AsyncIOScheduler:
@@ -30,15 +35,24 @@ def start_scheduler() -> AsyncIOScheduler:
 
     _scheduler = AsyncIOScheduler(timezone="UTC")
     _scheduler.add_job(
-        _job,
+        _job_monitor,
         trigger=IntervalTrigger(minutes=settings.monitor_interval_minutes),
         id="stock_monitor",
         next_run_time=None,
         replace_existing=True,
     )
+    _scheduler.add_job(
+        _job_catalog_refresh,
+        trigger=IntervalTrigger(seconds=settings.catalog_refresh_seconds),
+        id="catalog_refresh",
+        next_run_time=None,
+        replace_existing=True,
+    )
     _scheduler.start()
     logger.info(
-        "scheduler iniciado — intervalo=%d min", settings.monitor_interval_minutes
+        "scheduler iniciado — monitor=%dmin · catalog_refresh=%ds",
+        settings.monitor_interval_minutes,
+        settings.catalog_refresh_seconds,
     )
     return _scheduler
 

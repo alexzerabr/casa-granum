@@ -41,6 +41,7 @@ export function formatarQuantidade(
 export interface SumarioVerificacao {
   verificados: number;
   novos_alertas: number;
+  silenciados?: number;
   repostos: number;
   em_alerta: number;
   executado_em: string;

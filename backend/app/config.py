@@ -26,9 +26,11 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash"
 
-    monitor_interval_minutes: int = 30
+    monitor_interval_minutes: int = 5
     stock_alert_factor: float = 1.1
     stock_restore_factor: float = 1.5
+
+    catalog_refresh_seconds: int = 60
 
     cache_ttl_hours: int = 24
 

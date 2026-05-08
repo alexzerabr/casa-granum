@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS lista_reabastecimento (
   estado            TEXT DEFAULT 'ok',
   alerta_em         DATETIME,
   reposto_em        DATETIME,
-  ultima_verif      DATETIME
+  ultima_verif      DATETIME,
+  notificado_em     DATETIME
 );
 
 CREATE TABLE IF NOT EXISTS pedidos_clientes (
@@ -68,6 +69,10 @@ async def init_db() -> None:
         if "unidade_venda" not in cols:
             await db.execute(
                 "ALTER TABLE lista_reabastecimento ADD COLUMN unidade_venda TEXT"
+            )
+        if "notificado_em" not in cols:
+            await db.execute(
+                "ALTER TABLE lista_reabastecimento ADD COLUMN notificado_em DATETIME"
             )
         await db.commit()
 

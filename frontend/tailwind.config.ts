@@ -21,6 +21,8 @@ const config: Config = {
         dangersoft: "#FBEAE7",
         warn: "#9C6B0F",
         warnsoft: "#FBF1DC",
+        good: "#3F6A3A",
+        goodsoft: "#EAF2E8",
       },
       fontFamily: {
         sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],

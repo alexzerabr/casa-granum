@@ -18,19 +18,20 @@ class ItemReabastecimento(BaseModel):
     pro_cod: int
     pro_des: str
     grupo: str | None
-    unidade: str        # unidade de COMPRA (PRO_UNDE) — KG/UN/CX
-    unidade_venda: str  # unidade de VENDA  (PRO_UND)  — KG/UN/CAPS
+    unidade: str
+    unidade_venda: str
     estoque_min_kg: float
     estoque_atual_kg: float | None
     qtd_reposicao: float | None
     alerta_em: str | None
     ultima_verif: str | None
-    nivel: str  # 'critico' (abaixo do mínimo) | 'alerta' (acima do mín, dentro da margem)
+    nivel: str
 
 
 class SumarioVerificacao(BaseModel):
     verificados: int
     novos_alertas: int
+    silenciados: int = 0
     repostos: int
     em_alerta: int
     executado_em: str
@@ -44,6 +45,8 @@ def _calcular_nivel(atual: float | None, minimo: float) -> str:
 
 @router.get("", response_model=list[ItemReabastecimento])
 async def listar() -> list[ItemReabastecimento]:
+    # Reconcilia com Firebird: remove da lista produtos que foram desativados.
+    await asyncio.to_thread(checker.limpar_inativos)
     async with aiosqlite.connect(settings.sqlite_path) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(

@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Database, RefreshCw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Database, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -12,12 +12,14 @@ import {
   filtrosAtivos,
   FILTROS_VAZIOS,
   listarReabastecimento,
+  type SumarioVerificacao,
   unidadesDisponiveis,
   type FiltrosReabastecimento,
   type ItemReabastecimento,
 } from "@/lib/reabastecimento";
 
 const POLL_INTERVAL = 60_000;
+const TOAST_DURATION = 6_000;
 
 export default function ReabastecimentoPage() {
   const [itens, setItens] = useState<ItemReabastecimento[]>([]);
@@ -26,6 +28,7 @@ export default function ReabastecimentoPage() {
   const [running, setRunning] = useState(false);
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState<Date | null>(null);
   const [fonte, setFonte] = useState<"cache" | "ao-vivo">("cache");
+  const [sumario, setSumario] = useState<SumarioVerificacao | null>(null);
   const [filtros, setFiltros] = useState<FiltrosReabastecimento>({
     ...FILTROS_VAZIOS,
     unidades: new Set<string>(),
@@ -56,15 +59,23 @@ export default function ReabastecimentoPage() {
 
   const handleRunNow = async () => {
     setRunning(true);
+    setSumario(null);
     try {
-      await executarVerificacao();
+      const resultado = await executarVerificacao();
       await carregar("ao-vivo");
+      setSumario(resultado);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro na verificação");
     } finally {
       setRunning(false);
     }
   };
+
+  useEffect(() => {
+    if (!sumario) return;
+    const id = setTimeout(() => setSumario(null), TOAST_DURATION);
+    return () => clearTimeout(id);
+  }, [sumario]);
 
   const formatHora = (d: Date | null) =>
     d
@@ -145,6 +156,43 @@ export default function ReabastecimentoPage() {
               </span>
             </div>
           </div>
+
+          {/* Toast de conclusão da verificação manual */}
+          {sumario && !running && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="mb-6 flex items-start gap-3 rounded-md border border-good bg-goodsoft px-4 py-3 text-sm text-ink"
+            >
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-good" strokeWidth={2.5} />
+              <div className="flex-1">
+                <p className="font-semibold">Verificação concluída</p>
+                <p className="mt-0.5 text-inkdim">
+                  {sumario.verificados} produtos varridos ·{" "}
+                  {sumario.novos_alertas > 0 ? (
+                    <span className="font-semibold text-danger">
+                      {sumario.novos_alertas}{" "}
+                      {sumario.novos_alertas === 1 ? "novo alerta" : "novos alertas"}
+                    </span>
+                  ) : (
+                    "nenhum novo alerta"
+                  )}
+                  {sumario.repostos > 0 &&
+                    ` · ${sumario.repostos} ${sumario.repostos === 1 ? "reposto/desativado" : "repostos/desativados"}`}
+                  {" · "}
+                  {sumario.em_alerta} em alerta no total
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSumario(null)}
+                className="text-xs font-semibold text-inkdim hover:text-ink"
+                aria-label="Dispensar"
+              >
+                ✕
+              </button>
+            </div>
+          )}
 
           {/* Filtros */}
           {!loading && !error && itens.length > 0 && (

@@ -16,15 +16,38 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(name)s %(levelname)s %(message)s",
 )
+logger = logging.getLogger(__name__)
+
+# Tolerância pra Firebird ainda não estar disponível no boot do PC (WSL2,
+# Docker Desktop e servidor Nutify podem subir em ordens diferentes).
+_STARTUP_SCAN_RETRY_DELAYS = (5, 15, 45)
+
+
+async def _startup_scan_com_retry() -> None:
+    for tentativa, espera in enumerate(_STARTUP_SCAN_RETRY_DELAYS, start=1):
+        try:
+            await scan_state.executar(checker.executar_verificacao, origem="auto")
+            return
+        except Exception as exc:
+            logger.warning(
+                "startup scan tentativa %d/%d falhou (%s); retry em %ds",
+                tentativa,
+                len(_STARTUP_SCAN_RETRY_DELAYS),
+                exc,
+                espera,
+            )
+            await asyncio.sleep(espera)
+    logger.error(
+        "startup scan: todas as %d tentativas falharam — scheduler retomará no intervalo normal",
+        len(_STARTUP_SCAN_RETRY_DELAYS),
+    )
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await init_db()
     start_scheduler()
-    asyncio.create_task(
-        scan_state.executar(checker.executar_verificacao, origem="auto")
-    )
+    asyncio.create_task(_startup_scan_com_retry())
     yield
     stop_scheduler()
 

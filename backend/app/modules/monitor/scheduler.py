@@ -1,14 +1,16 @@
-"""Jobs em background: monitor de estoque e refresh do catálogo da IA."""
+"""Jobs em background: monitor de estoque, refresh do catálogo da IA e backup do SQLite."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from app.config import settings
+from app.modules import backup
 from app.modules.monitor import checker, scan_state
 from app.modules.recommendations import catalog
 
@@ -26,6 +28,13 @@ async def _job_monitor() -> None:
 
 async def _job_catalog_refresh() -> None:
     await asyncio.to_thread(catalog.refresh_em_background)
+
+
+async def _job_backup() -> None:
+    try:
+        await asyncio.to_thread(backup.executar_backup)
+    except Exception:
+        logger.exception("falha no backup do SQLite")
 
 
 def start_scheduler() -> AsyncIOScheduler:
@@ -48,11 +57,21 @@ def start_scheduler() -> AsyncIOScheduler:
         next_run_time=None,
         replace_existing=True,
     )
+    _scheduler.add_job(
+        _job_backup,
+        trigger=IntervalTrigger(
+            hours=24,
+            start_date=datetime.now(timezone.utc) + timedelta(seconds=30),
+        ),
+        id="sqlite_backup",
+        replace_existing=True,
+    )
     _scheduler.start()
     logger.info(
-        "scheduler iniciado — monitor=%dmin · catalog_refresh=%ds",
+        "scheduler iniciado — monitor=%dmin · catalog_refresh=%ds · backup=24h (retention=%d)",
         settings.monitor_interval_minutes,
         settings.catalog_refresh_seconds,
+        settings.backup_retention,
     )
     return _scheduler
 

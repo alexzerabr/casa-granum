@@ -12,24 +12,24 @@ import {
   filtrosAtivos,
   FILTROS_VAZIOS,
   listarReabastecimento,
-  statusVarredura,
   type SumarioVerificacao,
   unidadesDisponiveis,
   type FiltrosReabastecimento,
   type ItemReabastecimento,
 } from "@/lib/reabastecimento";
+import { useScanStatus } from "@/lib/useScanStatus";
 
 const POLL_LISTA_MS = 60_000;
-const POLL_STATUS_RUN_MS = 2_000;
-const POLL_STATUS_IDLE_MS = 30_000;
 const TOAST_DURATION = 6_000;
 
 export default function ReabastecimentoPage() {
+  const status = useScanStatus();
+  const running = status?.em_execucao ?? false;
+  const origemRun = status?.origem ?? null;
+
   const [itens, setItens] = useState<ItemReabastecimento[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [running, setRunning] = useState(false);
-  const [origemRun, setOrigemRun] = useState<"auto" | "manual" | null>(null);
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState<Date | null>(null);
   const [fonte, setFonte] = useState<"cache" | "ao-vivo">("cache");
   const [sumario, setSumario] = useState<SumarioVerificacao | null>(null);
@@ -58,43 +58,19 @@ export default function ReabastecimentoPage() {
     [],
   );
 
-  // Polling do /status — sincroniza spinner com backend (sobrevive a F5).
+  // Detecta transição running→idle (varredura finalizada, manual ou auto)
+  // e atualiza lista + mostra banner com último sumário.
+  const wasRunningRef = useRef(running);
   useEffect(() => {
-    let cancelado = false;
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const wasRunning = wasRunningRef.current;
+    wasRunningRef.current = running;
+    if (wasRunning && !running) {
+      void carregar("ao-vivo");
+      if (status?.ultimo_sumario) setSumario(status.ultimo_sumario);
+    }
+  }, [running, status?.ultimo_sumario, carregar]);
 
-    const tick = async () => {
-      if (cancelado) return;
-      try {
-        const st = await statusVarredura();
-        const eraRunning = runningRef.current;
-        setRunning(st.em_execucao);
-        setOrigemRun(st.origem);
-        if (eraRunning && !st.em_execucao) {
-          // Transição executando → idle: refletir resultado.
-          await carregar("ao-vivo");
-          if (st.ultimo_sumario) setSumario(st.ultimo_sumario);
-        }
-      } catch {
-        // Falha transitória de rede — mantém estado anterior, próximo tick tenta de novo.
-      } finally {
-        if (!cancelado) {
-          const proximo = runningRef.current
-            ? POLL_STATUS_RUN_MS
-            : POLL_STATUS_IDLE_MS;
-          timeoutId = setTimeout(tick, proximo);
-        }
-      }
-    };
-
-    void tick();
-    return () => {
-      cancelado = true;
-      if (timeoutId) clearTimeout(timeoutId);
-    };
-  }, [carregar]);
-
-  // Polling da lista (mais lento, independente do status).
+  // Carga inicial da lista + poll mais lento que o do status.
   useEffect(() => {
     void carregar("cache");
     const id = setInterval(() => {
@@ -105,17 +81,13 @@ export default function ReabastecimentoPage() {
 
   const handleRunNow = async () => {
     if (running) return;
-    setRunning(true);
     setSumario(null);
-    setOrigemRun("manual");
     try {
       const resultado = await executarVerificacao();
       await carregar("ao-vivo");
       setSumario(resultado);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro na verificação");
-    } finally {
-      setRunning(false);
     }
   };
 

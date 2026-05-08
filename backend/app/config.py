@@ -34,6 +34,8 @@ class Settings(BaseSettings):
 
     cache_ttl_hours: int = 24
 
+    backup_retention: int = 7
+
     sqlite_path: Path = Field(default=PROJECT_ROOT / "data" / "casa_granum.db")
 
     cors_origins: str = "http://localhost:3000"

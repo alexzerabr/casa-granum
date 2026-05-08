@@ -46,10 +46,10 @@ docker compose up -d --build
 
 ## Como rodar (produção, imagem do GHCR)
 
-Não precisa do código-fonte; só do `docker-compose.prod.yml` + `.env` + dir `data/`. Veja as instruções completas no chat do deploy ou em `docker-compose.prod.yml`.
+Não precisa do código-fonte; só do `docker-compose.prod.yml` + `.env`. O SQLite vive no volume nomeado `casagranum_data` — Docker cria automaticamente.
 
 ```bash
-mkdir -p ~/casa-granum/data && cd ~/casa-granum
+mkdir -p ~/casa-granum && cd ~/casa-granum
 curl -fsSL -o docker-compose.yml \
   https://raw.githubusercontent.com/alexzerabr/casa-granum/main/docker-compose.prod.yml
 # crie .env com os segredos reais (use .env.example como base)
@@ -57,10 +57,48 @@ docker compose pull
 docker compose up -d
 ```
 
-Atualizar pra última imagem publicada:
+Atualizar pra última imagem publicada (preserva o volume):
 
 ```bash
 docker compose pull && docker compose up -d
+```
+
+## Persistência
+
+O SQLite local fica em um **volume nomeado do Docker** (`casagranum_data`). Sobrevive a:
+
+- Reboot do PC
+- `docker compose down`
+- `docker compose pull` + `docker compose up -d` (atualização de imagem)
+
+Só é apagado por `docker compose down -v` (flag explícita).
+
+### Backup
+
+```bash
+# snapshot tar.gz no diretório atual
+docker run --rm \
+  -v casagranum_data:/data \
+  -v "$(pwd)":/backup \
+  alpine tar czf /backup/casa-granum-$(date +%F).tar.gz -C /data .
+```
+
+### Restore
+
+```bash
+docker compose down
+docker run --rm \
+  -v casagranum_data:/data \
+  -v "$(pwd)":/backup \
+  alpine sh -c "rm -rf /data/* && tar xzf /backup/casa-granum-2026-05-08.tar.gz -C /data"
+docker compose up -d
+```
+
+### Inspecionar SQLite ao vivo
+
+```bash
+docker compose exec backend sqlite3 /app/data/casa_granum.db \
+  "SELECT estado, COUNT(*) FROM lista_reabastecimento GROUP BY estado"
 ```
 
 ## Estrutura
@@ -68,7 +106,6 @@ docker compose pull && docker compose up -d
 ```
 backend/    FastAPI app, scheduler, módulos de monitor/recomendações
 frontend/   Next.js (App Router) com 3 abas
-data/       SQLite local (volume bind, não versionado)
 scripts/    utilitários (validação Firebird, etc.)
 .github/    workflow de build+publish para GHCR
 ```

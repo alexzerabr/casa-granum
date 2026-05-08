@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import logging
+
 import aiosqlite
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS recomendacao_cache (
@@ -53,6 +57,12 @@ CREATE INDEX IF NOT EXISTS idx_pedidos_status ON pedidos_clientes (status);
 async def init_db() -> None:
     """Cria tabelas, ativa WAL e roda migrações idempotentes."""
     settings.sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+    pre_existia = settings.sqlite_path.exists()
+    logger.info(
+        "sqlite path=%s pre_existia=%s",
+        settings.sqlite_path,
+        pre_existia,
+    )
     async with aiosqlite.connect(settings.sqlite_path) as db:
         await db.execute("PRAGMA journal_mode=WAL")
         await db.executescript(SCHEMA)
@@ -75,6 +85,12 @@ async def init_db() -> None:
                 "ALTER TABLE lista_reabastecimento ADD COLUMN notificado_em DATETIME"
             )
         await db.commit()
+
+        cur = await db.execute(
+            "SELECT estado, COUNT(*) FROM lista_reabastecimento GROUP BY estado"
+        )
+        contagens = {row[0]: row[1] for row in await cur.fetchall()}
+        logger.info("sqlite estado lista_reabastecimento: %s", contagens or "vazio")
 
 
 async def get_db() -> aiosqlite.Connection:

@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -8,6 +9,11 @@ from app.db.firebird import ping as firebird_ping
 from app.db.sqlite import init_db
 from app.modules.monitor.scheduler import start_scheduler, stop_scheduler
 from app.routers import pedidos, reabastecimento, recomendacoes
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(name)s %(levelname)s %(message)s",
+)
 
 
 @asynccontextmanager

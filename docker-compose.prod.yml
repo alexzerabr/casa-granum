@@ -7,7 +7,7 @@ services:
     container_name: casagranum-backend
     env_file: .env
     volumes:
-      - ./data:/app/data
+      - casagranum_data:/app/data
     ports:
       - "8000:8000"
     restart: unless-stopped
@@ -28,3 +28,7 @@ services:
       backend:
         condition: service_started
     restart: unless-stopped
+
+volumes:
+  casagranum_data:
+    name: casagranum_data

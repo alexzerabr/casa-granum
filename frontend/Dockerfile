@@ -20,7 +20,7 @@ WORKDIR /app
 
 ENV NODE_ENV=production \
     HOSTNAME=0.0.0.0 \
-    PORT=3000 \
+    PORT=8080 \
     NEXT_TELEMETRY_DISABLED=1
 
 RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
@@ -37,10 +37,10 @@ LABEL org.opencontainers.image.source="https://github.com/alexzerabr/casa-granum
       org.opencontainers.image.title="casa-granum-frontend" \
       org.opencontainers.image.vendor="Casa Granum"
 
-EXPOSE 3000
+EXPOSE 8080
 
 # alpine não tem curl/wget; usa o próprio node pra checar a raiz.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000/', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
+  CMD node -e "var p=process.env.PORT||8080;require('http').get('http://localhost:'+p+'/', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
 
 CMD ["node", "server.js"]

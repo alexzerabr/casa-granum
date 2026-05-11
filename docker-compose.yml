@@ -4,6 +4,9 @@ services:
       context: ./backend
     container_name: casagranum-backend
     env_file: .env
+    # Permite FB_HOST=host.docker.internal sem depender do Docker Desktop.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - casagranum_data:/app/data
     ports:
@@ -23,8 +26,10 @@ services:
         NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://localhost:8000}
     container_name: casagranum-frontend
     env_file: .env
+    environment:
+      PORT: ${FRONTEND_PORT:-8080}
     ports:
-      - "${FRONTEND_PORT:-8080}:3000"
+      - "${FRONTEND_PORT:-8080}:${FRONTEND_PORT:-8080}"
     depends_on:
       backend:
         condition: service_started

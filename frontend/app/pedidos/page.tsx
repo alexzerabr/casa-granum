@@ -1,23 +1,24 @@
 "use client";
 
+import { Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
-import { PedidoForm } from "@/components/PedidoForm";
+import { PedidoEditor } from "@/components/PedidoEditor";
 import { PedidoList } from "@/components/PedidoList";
 import { SearchField } from "@/components/SearchField";
 import {
-  atualizarStatus,
+  atualizarPedido,
   criarPedido,
   listarPedidos,
-  type NovoPedido,
+  removerPedido,
   type Pedido,
   type StatusPedido,
 } from "@/lib/pedidos";
 
 type Filtro = "todos" | StatusPedido;
 
-const filtros: { key: Filtro; label: string }[] = [
+const FILTROS: { key: Filtro; label: string }[] = [
   { key: "aberto", label: "Abertos" },
   { key: "atendido", label: "Atendidos" },
   { key: "cancelado", label: "Cancelados" },
@@ -30,13 +31,15 @@ export default function PedidosPage() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [editor, setEditor] = useState<{ aberto: boolean; pedido: Pedido | null }>(
+    { aberto: false, pedido: null },
+  );
 
   const carregar = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await listarPedidos();
-      setPedidos(data);
+      setPedidos(await listarPedidos());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao carregar pedidos");
     } finally {
@@ -48,14 +51,17 @@ export default function PedidosPage() {
     void carregar();
   }, [carregar]);
 
-  const pedidosFiltrados = useMemo(() => {
+  const filtrados = useMemo(() => {
     const term = search.trim().toLowerCase();
     return pedidos.filter((p) => {
       if (filtro !== "todos" && p.status !== filtro) return false;
       if (!term) return true;
-      return (
-        p.produto_nome.toLowerCase().includes(term) ||
-        (p.cliente_nome ?? "").toLowerCase().includes(term)
+      if (p.produto_nome.toLowerCase().includes(term)) return true;
+      if (p.observacao?.toLowerCase().includes(term)) return true;
+      return p.clientes.some(
+        (c) =>
+          c.nome.toLowerCase().includes(term) ||
+          (c.telefone ?? "").toLowerCase().includes(term),
       );
     });
   }, [pedidos, filtro, search]);
@@ -71,14 +77,38 @@ export default function PedidosPage() {
     return c;
   }, [pedidos]);
 
-  const handleNovo = async (p: NovoPedido) => {
-    const novo = await criarPedido(p);
-    setPedidos((prev) => [novo, ...prev]);
+  const abrirNovo = () => setEditor({ aberto: true, pedido: null });
+  const abrirEditar = (p: Pedido) => setEditor({ aberto: true, pedido: p });
+  const fechar = () => setEditor({ aberto: false, pedido: null });
+
+  const salvar = async (dados: {
+    produto_nome: string;
+    observacao?: string;
+    status?: StatusPedido;
+    clientes: { nome: string; telefone?: string | null; cliente_externo_id?: number | null }[];
+  }) => {
+    if (editor.pedido) {
+      const atualizado = await atualizarPedido(editor.pedido.id, dados);
+      setPedidos((prev) => prev.map((p) => (p.id === atualizado.id ? atualizado : p)));
+    } else {
+      const novo = await criarPedido({
+        produto_nome: dados.produto_nome,
+        observacao: dados.observacao,
+        clientes: dados.clientes,
+      });
+      setPedidos((prev) => [novo, ...prev]);
+    }
+    fechar();
   };
 
-  const handleUpdate = async (id: number, status: StatusPedido) => {
-    const atualizado = await atualizarStatus(id, status);
+  const mover = async (id: number, status: StatusPedido) => {
+    const atualizado = await atualizarPedido(id, { status });
     setPedidos((prev) => prev.map((p) => (p.id === id ? atualizado : p)));
+  };
+
+  const remover = async (id: number) => {
+    await removerPedido(id);
+    setPedidos((prev) => prev.filter((p) => p.id !== id));
   };
 
   return (
@@ -87,31 +117,35 @@ export default function PedidosPage() {
 
       <main className="flex-1">
         <section className="mx-auto max-w-5xl px-6 pb-16 pt-10 lg:px-10">
-          {/* Hero compacto */}
-          <div className="mb-6">
-            <p className="label mb-1.5">Aba 3 · Pedidos de Clientes</p>
-            <h1 className="text-3xl font-bold tracking-tight text-ink lg:text-4xl">
-              Anotações da loja
-            </h1>
-            <p className="mt-2 max-w-2xl text-sm text-inkdim">
-              Itens solicitados que não estavam disponíveis ou precisam ser
-              encomendados. Marque como atendido quando o produto chegar.
-            </p>
+          <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="label mb-1.5">Aba 3 · Pedidos de Clientes</p>
+              <h1 className="text-3xl font-bold tracking-tight text-ink lg:text-4xl">
+                Anotações da loja
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm text-inkdim">
+                Itens solicitados que não estavam disponíveis ou precisam ser encomendados.
+                Cada pedido pode ter várias pessoas — clique em adicionar para incluir mais
+                de um solicitante.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={abrirNovo}
+              className="inline-flex items-center gap-2 rounded-md bg-ink px-4 py-2 text-sm font-semibold text-cream hover:bg-forest"
+            >
+              <Plus className="h-4 w-4" strokeWidth={2.5} />
+              Novo pedido
+            </button>
           </div>
 
-          {/* Form */}
-          <div className="mb-8">
-            <PedidoForm onSubmit={handleNovo} />
-          </div>
-
-          {/* Filtros + busca compactos */}
           <div className="mb-5 flex flex-wrap items-center gap-3 border-b border-wheat pb-4">
             <div
               className="segment"
               role="group"
               aria-label="Filtrar pedidos por status"
             >
-              {filtros.map((f) => {
+              {FILTROS.map((f) => {
                 const ativo = filtro === f.key;
                 return (
                   <button
@@ -137,7 +171,7 @@ export default function PedidosPage() {
             <SearchField
               value={search}
               onChange={setSearch}
-              placeholder="Buscar produto ou cliente…"
+              placeholder="Buscar produto, cliente ou telefone…"
               ariaLabel="Buscar pedidos"
               className="ml-auto min-w-[240px] max-w-sm flex-1"
             />
@@ -151,9 +185,7 @@ export default function PedidosPage() {
 
           {!loading && error && (
             <div className="rounded-md border border-danger bg-dangersoft px-6 py-6 text-center">
-              <p className="text-xs font-semibold uppercase tracking-wider text-danger">
-                Falha
-              </p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-danger">Falha</p>
               <p className="mt-2 text-base text-ink">{error}</p>
               <button
                 type="button"
@@ -167,14 +199,24 @@ export default function PedidosPage() {
 
           {!loading && !error && (
             <PedidoList
-              pedidos={pedidosFiltrados}
-              onUpdate={handleUpdate}
+              pedidos={filtrados}
+              onEditar={abrirEditar}
+              onMover={mover}
+              onRemover={remover}
             />
           )}
         </section>
       </main>
 
       <Footer />
+
+      {editor.aberto && (
+        <PedidoEditor
+          pedido={editor.pedido}
+          onSalvar={salvar}
+          onCancelar={fechar}
+        />
+      )}
     </div>
   );
 }

@@ -31,6 +31,16 @@ class RecomendacaoResponse(BaseModel):
     produtos: list[ProdutoRecomendado]
 
 
+class CatalogoInfo(BaseModel):
+    total_produtos: int
+
+
+@router.get("/info", response_model=CatalogoInfo)
+async def info_catalogo() -> CatalogoInfo:
+    catalogo = await asyncio.to_thread(catalog.carregar_catalogo)
+    return CatalogoInfo(total_produtos=catalogo.total_produtos)
+
+
 @router.post("", response_model=RecomendacaoResponse)
 async def gerar_recomendacao(req: RecomendacaoRequest) -> RecomendacaoResponse:
     objetivo_hash = cache.hash_objetivo(req.objetivo)

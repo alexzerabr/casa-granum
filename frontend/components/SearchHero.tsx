@@ -1,8 +1,9 @@
 "use client";
 
 import { ArrowRight } from "lucide-react";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SearchField } from "@/components/SearchField";
+import { fetchCatalogoInfo } from "@/lib/api";
 
 const sugestoes = [
   "Emagrecer",
@@ -29,6 +30,13 @@ export function SearchHero({
   hasResults,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [totalProdutos, setTotalProdutos] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetchCatalogoInfo()
+      .then((info) => setTotalProdutos(info.total_produtos))
+      .catch(() => setTotalProdutos(null));
+  }, []);
 
   const submit = () => {
     if (!value.trim() || isLoading) return;
@@ -58,8 +66,10 @@ export function SearchHero({
       {!hasResults && (
         <p className="mt-3 max-w-xl text-base leading-relaxed text-inkdim">
           Diga seu objetivo em uma frase. A Casa Granum cruza com{" "}
-          <span className="font-semibold text-ink">168 produtos</span> da loja e
-          recomenda o que faz sentido pra você.
+          <span className="font-semibold text-ink">
+            {totalProdutos !== null ? `${totalProdutos} produtos` : "o catálogo"}
+          </span>{" "}
+          com propriedades cadastradas e recomenda o que faz sentido pra você.
         </p>
       )}
 

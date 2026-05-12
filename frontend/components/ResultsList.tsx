@@ -35,29 +35,41 @@ export function ResultsList({
         </div>
       </header>
 
-      <ol className="space-y-4">
-        {produtos.map((p, idx) => (
-          <li
-            key={`${p.pro_cod}-${idx}`}
-            className="flex gap-4 rounded-md border border-wheat bg-cream p-4 transition-colors hover:border-copper"
-          >
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ink text-sm font-bold tabular text-cream">
-              {idx + 1}
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-baseline justify-between gap-2">
-                <h3 className="text-base font-semibold text-ink">{p.nome}</h3>
-                <span className="label tabular shrink-0">
-                  Nº {String(p.pro_cod).padStart(3, "0")}
-                </span>
+      {produtos.length === 0 ? (
+        <div className="rounded-md border border-wheat bg-cream px-6 py-10 text-center">
+          <p className="text-base font-semibold text-ink">
+            Nenhum produto com propriedades cadastradas bate com esse objetivo.
+          </p>
+          <p className="mt-1.5 text-sm text-inkdim">
+            Tente reformular ou usar um termo mais amplo. Conforme mais produtos
+            ganham descrição de benefícios no Nutify, o catálogo cresce.
+          </p>
+        </div>
+      ) : (
+        <ol className="space-y-4">
+          {produtos.map((p, idx) => (
+            <li
+              key={`${p.pro_cod}-${idx}`}
+              className="flex gap-4 rounded-md border border-wheat bg-cream p-4 transition-colors hover:border-copper"
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ink text-sm font-bold tabular text-cream">
+                {idx + 1}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline justify-between gap-2">
+                  <h3 className="text-base font-semibold text-ink">{p.nome}</h3>
+                  <span className="label tabular shrink-0">
+                    Nº {String(p.pro_cod).padStart(3, "0")}
+                  </span>
+                </div>
+                <p className="mt-1.5 text-sm leading-relaxed text-inkdim">
+                  {p.motivo}
+                </p>
               </div>
-              <p className="mt-1.5 text-sm leading-relaxed text-inkdim">
-                {p.motivo}
-              </p>
-            </div>
-          </li>
-        ))}
-      </ol>
+            </li>
+          ))}
+        </ol>
+      )}
 
       <p className="mt-10 text-center text-xs leading-relaxed text-inkmuted">
         Recomendações geradas a partir dos benefícios cadastrados no catálogo da

@@ -39,18 +39,29 @@ CREATE TABLE IF NOT EXISTS lista_reabastecimento (
   notificado_em     DATETIME
 );
 
-CREATE TABLE IF NOT EXISTS pedidos_clientes (
-  id           INTEGER PRIMARY KEY AUTOINCREMENT,
-  produto_nome TEXT NOT NULL,
-  pro_cod      INTEGER,
-  cliente_nome TEXT,
-  observacao   TEXT,
-  status       TEXT DEFAULT 'aberto',
-  criado_em    DATETIME NOT NULL,
-  encerrado_em DATETIME,
-  criado_por   TEXT
+CREATE TABLE IF NOT EXISTS pedido (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  produto_nome  TEXT NOT NULL,
+  pro_cod       INTEGER,
+  unidade       TEXT,
+  observacao    TEXT,
+  status        TEXT NOT NULL DEFAULT 'aberto',
+  criado_em     DATETIME NOT NULL,
+  atualizado_em DATETIME NOT NULL,
+  encerrado_em  DATETIME
 );
-CREATE INDEX IF NOT EXISTS idx_pedidos_status ON pedidos_clientes (status);
+CREATE INDEX IF NOT EXISTS idx_pedido_status ON pedido (status);
+
+CREATE TABLE IF NOT EXISTS pedido_cliente (
+  id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+  pedido_id          INTEGER NOT NULL,
+  nome               TEXT NOT NULL,
+  telefone           TEXT,
+  cliente_externo_id INTEGER,
+  criado_em          DATETIME NOT NULL,
+  FOREIGN KEY (pedido_id) REFERENCES pedido(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_pedido_cliente_pedido ON pedido_cliente (pedido_id);
 """
 
 
@@ -65,6 +76,7 @@ async def init_db() -> None:
     )
     async with aiosqlite.connect(settings.sqlite_path) as db:
         await db.execute("PRAGMA journal_mode=WAL")
+        await db.execute("PRAGMA foreign_keys=ON")
         await db.executescript(SCHEMA)
         cursor = await db.execute("PRAGMA table_info(lista_reabastecimento)")
         cols = {row[1] for row in await cursor.fetchall()}
@@ -84,6 +96,8 @@ async def init_db() -> None:
             await db.execute(
                 "ALTER TABLE lista_reabastecimento ADD COLUMN notificado_em DATETIME"
             )
+
+        await _migrar_pedidos_legados(db)
         await db.commit()
 
         cur = await db.execute(
@@ -93,7 +107,41 @@ async def init_db() -> None:
         logger.info("sqlite estado lista_reabastecimento: %s", contagens or "vazio")
 
 
+async def _migrar_pedidos_legados(db: aiosqlite.Connection) -> None:
+    """Copia `pedidos_clientes` (schema antigo, 1 cliente em coluna) p/ `pedido` + `pedido_cliente`."""
+    cur = await db.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='pedidos_clientes'"
+    )
+    if await cur.fetchone() is None:
+        return
+
+    cur = await db.execute("SELECT COUNT(*) FROM pedido")
+    if (await cur.fetchone())[0] > 0:
+        await db.execute("DROP TABLE pedidos_clientes")
+        return
+
+    cur = await db.execute(
+        "SELECT id, produto_nome, pro_cod, cliente_nome, observacao, status, "
+        "criado_em, encerrado_em FROM pedidos_clientes"
+    )
+    legados = await cur.fetchall()
+    for (lid, prod, cod, cliente, obs, status, criado, encerrado) in legados:
+        await db.execute(
+            "INSERT INTO pedido (id, produto_nome, pro_cod, observacao, status, "
+            "criado_em, atualizado_em, encerrado_em) VALUES (?,?,?,?,?,?,?,?)",
+            (lid, prod, cod, obs, status, criado, criado, encerrado),
+        )
+        if cliente and cliente.strip():
+            await db.execute(
+                "INSERT INTO pedido_cliente (pedido_id, nome, criado_em) VALUES (?,?,?)",
+                (lid, cliente.strip(), criado),
+            )
+    await db.execute("DROP TABLE pedidos_clientes")
+    logger.info("migração pedidos: %d registros movidos", len(legados))
+
+
 async def get_db() -> aiosqlite.Connection:
     db = await aiosqlite.connect(settings.sqlite_path)
     db.row_factory = aiosqlite.Row
+    await db.execute("PRAGMA foreign_keys=ON")
     return db

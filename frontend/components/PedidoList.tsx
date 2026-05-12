@@ -1,11 +1,26 @@
 "use client";
 
-import { Check, X } from "lucide-react";
-import type { Pedido, StatusPedido } from "@/lib/pedidos";
+import {
+  Check,
+  ChevronDown,
+  Pencil,
+  Phone,
+  Trash2,
+  Undo2,
+  X,
+} from "lucide-react";
+import { useState } from "react";
+import {
+  formatarTelefone,
+  type Pedido,
+  type StatusPedido,
+} from "@/lib/pedidos";
 
 interface Props {
   pedidos: Pedido[];
-  onUpdate: (id: number, status: StatusPedido) => Promise<void>;
+  onEditar: (p: Pedido) => void;
+  onMover: (id: number, status: StatusPedido) => Promise<void>;
+  onRemover: (id: number) => Promise<void>;
 }
 
 const STATUS_BADGE: Record<StatusPedido, string> = {
@@ -20,7 +35,7 @@ const STATUS_LABEL: Record<StatusPedido, string> = {
   cancelado: "Cancelado",
 };
 
-const formatDate = (iso: string) =>
+const formatData = (iso: string) =>
   new Date(iso).toLocaleString("pt-BR", {
     day: "2-digit",
     month: "2-digit",
@@ -29,15 +44,15 @@ const formatDate = (iso: string) =>
     minute: "2-digit",
   });
 
-export function PedidoList({ pedidos, onUpdate }: Props) {
+export function PedidoList({ pedidos, onEditar, onMover, onRemover }: Props) {
+  const [confirmandoId, setConfirmandoId] = useState<number | null>(null);
+
   if (pedidos.length === 0) {
     return (
       <div className="rounded-md border border-wheat bg-cream py-12 text-center">
-        <p className="text-base font-semibold text-ink">
-          Nenhum pedido por aqui ainda.
-        </p>
+        <p className="text-base font-semibold text-ink">Nenhum pedido por aqui ainda.</p>
         <p className="mt-1 text-sm text-inkdim">
-          registros aparecem assim que forem adicionados acima
+          registros aparecem assim que forem adicionados
         </p>
       </div>
     );
@@ -53,10 +68,11 @@ export function PedidoList({ pedidos, onUpdate }: Props) {
           }`}
         >
           <div className="flex flex-col items-start text-xs text-inkdim">
-            <span className="label tabular">
-              Nº {String(p.id).padStart(3, "0")}
+            <span className="label tabular">Nº {String(p.id).padStart(3, "0")}</span>
+            <span className="mt-1 tabular">{formatData(p.criado_em)}</span>
+            <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-wheat/40 px-2 py-0.5 text-[11px] font-semibold tabular text-ink">
+              {p.clientes.length} {p.clientes.length === 1 ? "pessoa" : "pessoas"}
             </span>
-            <span className="mt-1 tabular">{formatDate(p.criado_em)}</span>
           </div>
 
           <div className="min-w-0">
@@ -67,22 +83,24 @@ export function PedidoList({ pedidos, onUpdate }: Props) {
             >
               {p.produto_nome}
             </h3>
-            <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-0.5 text-xs text-inkdim">
-              {p.cliente_nome && (
-                <span>
-                  <span className="font-semibold text-inkdim">Cliente:</span>{" "}
-                  {p.cliente_nome}
-                </span>
-              )}
-              {p.criado_por && (
-                <span>
-                  <span className="font-semibold text-inkdim">Por:</span>{" "}
-                  {p.criado_por}
-                </span>
-              )}
-            </div>
+            <ul className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink">
+              {p.clientes.map((c) => (
+                <li
+                  key={c.id}
+                  className="inline-flex items-center gap-1 rounded-md bg-creamdeep px-2 py-0.5"
+                >
+                  <span>{c.nome}</span>
+                  {c.telefone && (
+                    <span className="inline-flex items-center gap-0.5 text-inkdim tabular">
+                      <Phone className="h-3 w-3" strokeWidth={2} />
+                      {formatarTelefone(c.telefone)}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
             {p.observacao && (
-              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink">
+              <p className="mt-2 max-w-2xl whitespace-pre-line text-sm leading-relaxed text-inkdim">
                 {p.observacao}
               </p>
             )}
@@ -94,31 +112,102 @@ export function PedidoList({ pedidos, onUpdate }: Props) {
             >
               {STATUS_LABEL[p.status]}
             </span>
-            {p.status === "aberto" && (
-              <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => onEditar(p)}
+                className="rounded-md border border-wheat px-2 py-1 text-xs font-semibold text-ink hover:border-copper hover:text-copper"
+                title="Editar pedido"
+              >
+                <Pencil className="h-3 w-3" strokeWidth={2.5} />
+              </button>
+
+              <MoverMenu
+                statusAtual={p.status}
+                onEscolher={(s) => onMover(p.id, s)}
+              />
+
+              {confirmandoId === p.id ? (
+                <span className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await onRemover(p.id);
+                      setConfirmandoId(null);
+                    }}
+                    className="rounded-md border border-danger bg-dangersoft px-2 py-1 text-xs font-semibold text-danger hover:bg-danger hover:text-cream"
+                    title="Confirmar remoção"
+                  >
+                    <Check className="h-3 w-3" strokeWidth={2.5} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmandoId(null)}
+                    className="rounded-md border border-wheat px-2 py-1 text-xs text-inkmuted hover:border-ink"
+                    title="Cancelar"
+                  >
+                    <X className="h-3 w-3" strokeWidth={2.5} />
+                  </button>
+                </span>
+              ) : (
                 <button
                   type="button"
-                  onClick={() => onUpdate(p.id, "atendido")}
-                  className="flex items-center gap-1 rounded-md border border-emerald-700/30 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800 transition-colors hover:bg-emerald-100"
-                  title="marcar como atendido"
+                  onClick={() => setConfirmandoId(p.id)}
+                  className="rounded-md border border-wheat px-2 py-1 text-xs font-semibold text-inkmuted hover:border-danger hover:text-danger"
+                  title="Remover pedido"
                 >
-                  <Check className="h-3 w-3" strokeWidth={2.5} />
-                  Atender
+                  <Trash2 className="h-3 w-3" strokeWidth={2.5} />
                 </button>
-                <button
-                  type="button"
-                  onClick={() => onUpdate(p.id, "cancelado")}
-                  className="flex items-center gap-1 rounded-md border border-wheat px-2 py-1 text-xs font-semibold text-inkmuted transition-colors hover:border-danger hover:text-danger"
-                  title="cancelar pedido"
-                >
-                  <X className="h-3 w-3" strokeWidth={2.5} />
-                  Cancelar
-                </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </li>
       ))}
     </ol>
+  );
+}
+
+function MoverMenu({
+  statusAtual,
+  onEscolher,
+}: {
+  statusAtual: StatusPedido;
+  onEscolher: (s: StatusPedido) => void;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const opcoes: StatusPedido[] = ["aberto", "atendido", "cancelado"];
+  const restantes = opcoes.filter((o) => o !== statusAtual);
+
+  return (
+    <span className="relative">
+      <button
+        type="button"
+        onClick={() => setAberto((v) => !v)}
+        onBlur={() => setTimeout(() => setAberto(false), 150)}
+        className="inline-flex items-center gap-0.5 rounded-md border border-wheat px-2 py-1 text-xs font-semibold text-ink hover:border-copper hover:text-copper"
+        title="Mover para outro status"
+      >
+        <Undo2 className="h-3 w-3" strokeWidth={2.5} />
+        <ChevronDown className="h-3 w-3" />
+      </button>
+      {aberto && (
+        <div className="absolute right-0 top-full z-20 mt-1 min-w-[120px] rounded-md border border-wheat bg-cream shadow-md">
+          {restantes.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                setAberto(false);
+                void onEscolher(s);
+              }}
+              className="block w-full px-3 py-1.5 text-left text-xs font-semibold text-ink hover:bg-wheat/40"
+            >
+              {STATUS_LABEL[s]}
+            </button>
+          ))}
+        </div>
+      )}
+    </span>
   );
 }

@@ -31,15 +31,14 @@ class ProdutoRecomendado(BaseModel):
 
 _INSTRUCOES = (
     "Você é o assistente da Casa Granum, loja de produtos a granel naturais. "
-    "Dado o catálogo abaixo (cada produto traz código, nome, grupo, preço por "
-    "kg; alguns também trazem um texto livre de benefícios), recomende de 3 a "
-    "6 produtos que melhor atendem ao objetivo do cliente. Use apenas produtos "
-    "presentes no catálogo. Quando o produto tiver texto de benefícios, baseie "
-    "a justificativa nele; quando não tiver, use seu conhecimento geral sobre "
-    "o ingrediente, mas sempre conectando ao objetivo informado. Para cada "
-    "produto escolhido, escreva UMA frase em português ligando um benefício "
-    "específico ao objetivo. Retorne entre 3 e 6 itens, ordenados do mais ao "
-    "menos relevante."
+    "Dado o catálogo abaixo (cada produto traz código, nome, grupo, preço e um "
+    "texto de benefícios), recomende os produtos que melhor atendem ao objetivo "
+    "do cliente. Use apenas produtos presentes no catálogo e baseie cada "
+    "justificativa no texto de benefícios do próprio produto — não invente "
+    "propriedades. Para cada produto escolhido, escreva UMA frase em português "
+    "ligando um benefício específico ao objetivo. Retorne de 1 a 6 itens, "
+    "ordenados do mais ao menos relevante. Se nenhum produto do catálogo se "
+    "conectar ao objetivo, retorne uma lista vazia."
 )
 
 
@@ -84,9 +83,10 @@ def recomendar(objetivo: str, catalogo: str) -> list[dict]:
         )
 
     parsed = response.parsed
-    if not parsed or not isinstance(parsed, list):
+    if not isinstance(parsed, list):
         raise RecomendacaoError(
             f"resposta sem produtos parseáveis (text={response.text!r})"
         )
 
+    # Lista vazia é válida: significa "nada no catálogo se conecta ao objetivo".
     return [p.model_dump() if isinstance(p, ProdutoRecomendado) else p for p in parsed]

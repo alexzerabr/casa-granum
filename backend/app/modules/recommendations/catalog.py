@@ -20,18 +20,31 @@ class Catalogo:
     total_produtos: int
 
 
-# PRO_IDB='S' filtra granéis (balança) — exclui pacotes prontos como macarrão e doces.
+# Só produtos com benefícios cadastrados (PRO_BCO) — a IA recomenda só o que a
+# loja descreveu, nada de inferir propriedade pelo nome. Cresce conforme o
+# lojista preenche o campo no Nutify (refletido em até CATALOG_REFRESH_SECONDS).
 _QUERY = """
-SELECT p.PRO_COD, p.PRO_DES, g.GRU_DES, p.PRO_VLC, p.PRO_QTD, p.PRO_BCO
+SELECT p.PRO_COD, p.PRO_DES, g.GRU_DES, p.PRO_VLC, p.PRO_UND, p.PRO_QTD, p.PRO_BCO
 FROM PRODUTO p
 JOIN GRUPO g ON g.GRU_COD = p.PRO_GRU
-WHERE p.PRO_SIT = 'A' AND p.PRO_IDB = 'S'
+WHERE p.PRO_SIT = 'A' AND p.PRO_IDB = 'S' AND p.PRO_BCO IS NOT NULL
 ORDER BY p.PRO_DES
 """
 
+# CAPS no Nutify identifica o pote (ex.: "60 caps"), não a cápsula avulsa — trata como unidade.
+_SUFIXO_UNIDADE = {"KG": "kg", "UN": "un", "CAPS": "un"}
 
-def _formatar_produto(cod: int, nome: str, grupo: str, preco, estoque, beneficios: str | None) -> str:
-    preco_fmt = f"R$ {float(preco):.2f}/kg".replace(".", ",")
+
+def _formatar_preco(preco, unidade: str | None) -> str:
+    und = (unidade or "").strip().upper()
+    sufixo = _SUFIXO_UNIDADE.get(und, und.lower() or "un")
+    return f"R$ {float(preco):.2f}/{sufixo}".replace(".", ",")
+
+
+def _formatar_produto(
+    cod: int, nome: str, grupo: str, preco, unidade: str | None, estoque, beneficios: str | None
+) -> str:
+    preco_fmt = _formatar_preco(preco, unidade)
     indisponivel = " [SEM ESTOQUE]" if estoque is None or float(estoque) <= 0 else ""
     cabecalho = f"[{cod}] {nome} ({grupo}, {preco_fmt}){indisponivel}"
     if beneficios:
@@ -43,27 +56,23 @@ def _formatar_produto(cod: int, nome: str, grupo: str, preco, estoque, beneficio
 def _carregar_do_firebird() -> Catalogo:
     blocos: list[str] = ["=== CATÁLOGO CASA GRANUM ===\n"]
     total = 0
-    com_beneficios = 0
 
     with firebird_connection() as con:
         cur = con.cursor()
         cur.execute(_QUERY)
-        for cod, nome, grupo, preco, estoque, bco in cur:
+        for cod, nome, grupo, preco, unidade, estoque, bco in cur:
             beneficios = decode_blob(bco)
             beneficios_norm = beneficios.strip() if beneficios else None
-            blocos.append(_formatar_produto(cod, nome, grupo, preco, estoque, beneficios_norm))
+            if not beneficios_norm:
+                continue
+            blocos.append(
+                _formatar_produto(cod, nome, grupo, preco, unidade, estoque, beneficios_norm)
+            )
             total += 1
-            if beneficios_norm:
-                com_beneficios += 1
 
     texto = "\n\n".join(blocos)
     digest = hashlib.sha256(texto.encode("utf-8")).hexdigest()
-    logger.info(
-        "catalog loaded: %d produtos (%d com benefícios), hash=%s",
-        total,
-        com_beneficios,
-        digest[:12],
-    )
+    logger.info("catalog loaded: %d produtos com benefícios, hash=%s", total, digest[:12])
     return Catalogo(texto=texto, hash=digest, total_produtos=total)
 
 

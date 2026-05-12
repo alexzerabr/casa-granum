@@ -9,6 +9,7 @@ const tabs = [
   { label: "Consulta", href: "/", active: true },
   { label: "Reabastecimento", href: "/reabastecimento", active: true },
   { label: "Pedidos", href: "/pedidos", active: true },
+  { label: "Rank", href: "/rank", active: true },
 ];
 
 export function Header() {
@@ -22,23 +23,18 @@ export function Header() {
   return (
     <header className="relative z-10 bg-forest text-cream">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-5 lg:px-12">
-        <Link href="/" className="flex items-center gap-4">
+        <Link href="/" className="flex items-center gap-3" aria-label="Casa Granum — Painel de Gestão">
           <Image
-            src="/logo-light.png"
+            src="/logo-brand.png"
             alt="Casa Granum"
-            width={56}
-            height={56}
+            width={1479}
+            height={474}
             priority
-            className="h-12 w-12 [filter:brightness(0)_invert(1)]"
+            className="h-9 w-auto lg:h-10"
           />
-          <div className="hidden flex-col leading-none sm:flex">
-            <span className="text-lg font-bold tracking-tight text-cream">
-              Casa Granum
-            </span>
-            <span className="mt-1 text-xs font-medium text-cream/80">
-              Mercearia Natural
-            </span>
-          </div>
+          <span className="hidden border-l border-cream/25 pl-3 text-xs font-medium uppercase tracking-wider text-cream/80 sm:inline">
+            Painel de Gestão
+          </span>
         </Link>
 
         <div className="flex items-center gap-6">

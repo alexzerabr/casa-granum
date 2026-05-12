@@ -5,6 +5,8 @@ pydantic-settings==2.7.1
 firebird-driver==2.0.3
 aiosqlite==0.20.0
 google-genai==1.74.0
+openai==1.59.6
+anthropic==0.42.0
 python-telegram-bot==21.10
 APScheduler==3.11.0
 httpx==0.28.1

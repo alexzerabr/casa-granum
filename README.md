@@ -79,6 +79,29 @@ Atualizar pra última imagem publicada (preserva o volume):
 docker compose pull && docker compose up -d
 ```
 
+## Acesso remoto via Cloudflare Tunnel
+
+Serviço `cloudflared` no profile `tunnel` expõe a stack sem abrir portas no roteador.
+
+1. Em Zero Trust → Networks → Tunnels: criar tunnel, copiar o token, e adicionar 2 public hostnames apontando para `http://frontend:8080` e `http://backend:8000`.
+
+2. No `.env`:
+
+```env
+CLOUDFLARE_TUNNEL_TOKEN=eyJh...
+NEXT_PUBLIC_BACKEND_URL=https://api.seudominio.com
+CORS_ORIGINS=https://app.seudominio.com
+```
+
+3. Subir:
+
+```bash
+docker compose build frontend
+docker compose --profile tunnel up -d
+```
+
+`NEXT_PUBLIC_BACKEND_URL` é fixado em build time — trocar a URL pública exige rebuild do frontend. `CORS_ORIGINS` aplica em runtime.
+
 ## Persistência
 
 O SQLite local fica em um **volume nomeado do Docker** (`casagranum_data`). Sobrevive a:

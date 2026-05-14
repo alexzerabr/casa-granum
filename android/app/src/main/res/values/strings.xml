@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Casa Granum</string>
+    <string name="welcome_title">Casa Granum</string>
+    <string name="welcome_subtitle">Informe a URL do servidor para conectar.</string>
+    <string name="url_label">URL do servidor</string>
+    <string name="url_placeholder">https://app.casagranum.com.br</string>
+    <string name="connect">Conectar</string>
+    <string name="settings_title">Endereço do servidor</string>
+    <string name="save">Salvar</string>
+    <string name="cancel">Cancelar</string>
+    <string name="download_started">Download iniciado</string>
+    <string name="invalid_url">URL inválida</string>
+    <string name="settings_cd">Configurações</string>
+</resources>

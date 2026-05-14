@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="forest">#16201A</color>
+    <color name="forestdeep">#0D1411</color>
+    <color name="copper">#A96132</color>
+    <color name="copperdark">#8B4E28</color>
+    <color name="copperglow">#C77845</color>
+    <color name="cream">#F5F0EA</color>
+    <color name="creamdeep">#EBE3D8</color>
+    <color name="ink">#1C2120</color>
+    <color name="inkdim">#3D3935</color>
+    <color name="wheat">#D4C4A8</color>
+    <color name="wheatlight">#E5D8C0</color>
+    <color name="ic_launcher_background">#F5F0EA</color>
+</resources>

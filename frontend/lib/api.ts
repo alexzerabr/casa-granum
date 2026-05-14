@@ -1,3 +1,5 @@
+import { apiFetch } from "./http";
+
 export interface Produto {
   pro_cod: number;
   nome: string;
@@ -11,34 +13,20 @@ export interface RecomendacaoResponse {
   produtos: Produto[];
 }
 
-const BACKEND_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
-
 export interface CatalogoInfo {
   total_produtos: number;
 }
 
-export async function fetchCatalogoInfo(): Promise<CatalogoInfo> {
-  const res = await fetch(`${BACKEND_URL}/recomendacoes/info`);
-  if (!res.ok) throw new Error(`Falha (${res.status}) ao ler o catálogo`);
-  return res.json();
+export function fetchCatalogoInfo(): Promise<CatalogoInfo> {
+  return apiFetch<CatalogoInfo>("/recomendacoes/info");
 }
 
-export async function fetchRecomendacoes(
+export function fetchRecomendacoes(
   objetivo: string,
 ): Promise<RecomendacaoResponse> {
-  const res = await fetch(`${BACKEND_URL}/recomendacoes`, {
+  return apiFetch<RecomendacaoResponse>("/recomendacoes", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ objetivo }),
   });
-
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new Error(
-      `Falha (${res.status}) ao consultar o catálogo${detail ? `: ${detail}` : ""}`,
-    );
-  }
-
-  return res.json();
 }

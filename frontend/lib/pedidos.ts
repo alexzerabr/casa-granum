@@ -1,3 +1,5 @@
+import { apiFetch } from "./http";
+
 export type StatusPedido = "aberto" | "atendido" | "cancelado";
 
 export interface ClienteEntrada {
@@ -47,19 +49,7 @@ export interface ClienteExterno {
   telefone: string | null;
 }
 
-const BACKEND_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
-
-async function handle<T>(res: Response): Promise<T> {
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new Error(`Falha (${res.status})${detail ? `: ${detail}` : ""}`);
-  }
-  if (res.status === 204) return undefined as T;
-  return res.json();
-}
-
-export async function listarPedidos(opts?: {
+export function listarPedidos(opts?: {
   status?: StatusPedido;
   search?: string;
   desde?: string;
@@ -69,44 +59,38 @@ export async function listarPedidos(opts?: {
   if (opts?.search) params.set("search", opts.search);
   if (opts?.desde) params.set("desde", opts.desde);
   const qs = params.toString() ? `?${params}` : "";
-  return handle(await fetch(`${BACKEND_URL}/pedidos${qs}`));
+  return apiFetch<Pedido[]>(`/pedidos${qs}`);
 }
 
-export async function criarPedido(p: NovoPedido): Promise<Pedido> {
-  return handle(
-    await fetch(`${BACKEND_URL}/pedidos`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(p),
-    }),
-  );
+export function criarPedido(p: NovoPedido): Promise<Pedido> {
+  return apiFetch<Pedido>("/pedidos", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(p),
+  });
 }
 
-export async function atualizarPedido(
+export function atualizarPedido(
   id: number,
   patch: PatchPedido,
 ): Promise<Pedido> {
-  return handle(
-    await fetch(`${BACKEND_URL}/pedidos/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
-    }),
-  );
+  return apiFetch<Pedido>(`/pedidos/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
 }
 
-export async function removerPedido(id: number): Promise<void> {
-  await handle<void>(
-    await fetch(`${BACKEND_URL}/pedidos/${id}`, { method: "DELETE" }),
-  );
+export function removerPedido(id: number): Promise<void> {
+  return apiFetch<void>(`/pedidos/${id}`, { method: "DELETE" });
 }
 
-export async function buscarClientesExternos(
+export function buscarClientesExternos(
   q: string,
   limite = 15,
 ): Promise<ClienteExterno[]> {
   const params = new URLSearchParams({ q, limite: String(limite) });
-  return handle(await fetch(`${BACKEND_URL}/clientes/buscar?${params}`));
+  return apiFetch<ClienteExterno[]>(`/clientes/buscar?${params}`);
 }
 
 export function formatarTelefone(raw: string | null | undefined): string {

@@ -1,3 +1,5 @@
+import { apiFetch, apiUrl } from "./http";
+
 export interface ItemRank {
   pro_cod: number;
   pro_des: string;
@@ -31,17 +33,6 @@ export type Ordem = "qtd" | "valor" | "movimentos";
 export type Direcao = "asc" | "desc";
 export type Granularidade = "dia" | "semana" | "mes";
 
-const BACKEND_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
-
-async function handle<T>(res: Response): Promise<T> {
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new Error(`Falha (${res.status})${detail ? `: ${detail}` : ""}`);
-  }
-  return res.json();
-}
-
 export interface FiltroRank {
   desde?: string;
   ate?: string;
@@ -64,12 +55,12 @@ function montarQS(opts: FiltroRank): string {
   return p.toString();
 }
 
-export async function topRank(opts: FiltroRank = {}): Promise<RankResposta> {
+export function topRank(opts: FiltroRank = {}): Promise<RankResposta> {
   const qs = montarQS(opts);
-  return handle(await fetch(`${BACKEND_URL}/rank${qs ? `?${qs}` : ""}`));
+  return apiFetch<RankResposta>(`/rank${qs ? `?${qs}` : ""}`);
 }
 
-export async function listarGrupos(
+export function listarGrupos(
   desde?: string,
   ate?: string,
 ): Promise<GrupoOpcao[]> {
@@ -77,12 +68,10 @@ export async function listarGrupos(
   if (desde) p.set("desde", desde);
   if (ate) p.set("ate", ate);
   const qs = p.toString();
-  return handle(
-    await fetch(`${BACKEND_URL}/rank/grupos${qs ? `?${qs}` : ""}`),
-  );
+  return apiFetch<GrupoOpcao[]>(`/rank/grupos${qs ? `?${qs}` : ""}`);
 }
 
-export async function serieRank(
+export function serieRank(
   proCod: number,
   desde?: string,
   ate?: string,
@@ -93,14 +82,14 @@ export async function serieRank(
   if (ate) p.set("ate", ate);
   if (granularidade) p.set("granularidade", granularidade);
   const qs = p.toString();
-  return handle(
-    await fetch(`${BACKEND_URL}/rank/${proCod}/serie${qs ? `?${qs}` : ""}`),
+  return apiFetch<PontoSerie[]>(
+    `/rank/${proCod}/serie${qs ? `?${qs}` : ""}`,
   );
 }
 
 export function urlCsv(opts: FiltroRank): string {
   const qs = montarQS({ ...opts, limite: opts.limite ?? 200 });
-  return `${BACKEND_URL}/rank/csv${qs ? `?${qs}` : ""}`;
+  return apiUrl(`/rank/csv${qs ? `?${qs}` : ""}`);
 }
 
 export function isoDaysAgo(days: number): string {

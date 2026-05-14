@@ -1,3 +1,5 @@
+import { apiFetch } from "./http";
+
 export type Nivel = "critico" | "alerta";
 
 export interface ItemReabastecimento {
@@ -123,29 +125,16 @@ export function filtrosAtivos(f: FiltrosReabastecimento): boolean {
   );
 }
 
-const BACKEND_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
-
-async function handle<T>(res: Response): Promise<T> {
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new Error(`Falha (${res.status})${detail ? `: ${detail}` : ""}`);
-  }
-  return res.json();
-}
-
-export async function listarReabastecimento(): Promise<ItemReabastecimento[]> {
-  const res = await fetch(`${BACKEND_URL}/reabastecimento`, {
+export function listarReabastecimento(): Promise<ItemReabastecimento[]> {
+  return apiFetch<ItemReabastecimento[]>("/reabastecimento", {
     cache: "no-store",
   });
-  return handle<ItemReabastecimento[]>(res);
 }
 
-export async function executarVerificacao(): Promise<SumarioVerificacao> {
-  const res = await fetch(`${BACKEND_URL}/reabastecimento/run`, {
+export function executarVerificacao(): Promise<SumarioVerificacao> {
+  return apiFetch<SumarioVerificacao>("/reabastecimento/run", {
     method: "POST",
   });
-  return handle<SumarioVerificacao>(res);
 }
 
 export interface StatusVarredura {
@@ -155,9 +144,8 @@ export interface StatusVarredura {
   ultimo_sumario: SumarioVerificacao | null;
 }
 
-export async function statusVarredura(): Promise<StatusVarredura> {
-  const res = await fetch(`${BACKEND_URL}/reabastecimento/status`, {
+export function statusVarredura(): Promise<StatusVarredura> {
+  return apiFetch<StatusVarredura>("/reabastecimento/status", {
     cache: "no-store",
   });
-  return handle<StatusVarredura>(res);
 }

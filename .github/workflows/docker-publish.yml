@@ -5,11 +5,6 @@ on:
     branches: [main]
     tags: ["v*"]
   workflow_dispatch:
-    inputs:
-      next_public_backend_url:
-        description: "URL do backend para o build do frontend"
-        required: false
-        default: "http://localhost:8000"
 
 env:
   REGISTRY: ghcr.io
@@ -85,7 +80,5 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            NEXT_PUBLIC_BACKEND_URL=${{ github.event.inputs.next_public_backend_url || vars.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000' }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend

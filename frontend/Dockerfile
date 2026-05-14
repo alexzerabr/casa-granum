@@ -8,9 +8,6 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# NEXT_PUBLIC_* é inlinado no bundle: precisa estar definido em build time.
-ARG NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
-ENV NEXT_PUBLIC_BACKEND_URL=$NEXT_PUBLIC_BACKEND_URL
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm run build

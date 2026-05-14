@@ -27,6 +27,7 @@ services:
     env_file: .env
     environment:
       PORT: ${FRONTEND_PORT:-8080}
+      BACKEND_INTERNAL_URL: http://backend:8000
     ports:
       - "${FRONTEND_PORT:-8080}:${FRONTEND_PORT:-8080}"
     depends_on:

@@ -13,6 +13,7 @@ Quatro abas:
 
 - **Backend:** Python 3.12 + FastAPI + APScheduler + SQLite (aiosqlite) + firebird-driver (libfbclient nativo)
 - **Frontend:** Next.js 14 (App Router) + Tailwind v3
+- **App Android:** Kotlin + Jetpack Compose envelopando WebView ([`android/`](android/README.md))
 - **Banco origem (somente leitura):** Firebird 3.0 com WireCrypt — Nutify PDV
 - **Persistência local:** SQLite (cache de IA, lista de reabastecimento, pedidos)
 - **Deploy:** Docker Compose; imagens publicadas em GHCR via GitHub Actions

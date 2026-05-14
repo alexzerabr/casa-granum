@@ -81,26 +81,19 @@ docker compose pull && docker compose up -d
 
 ## Acesso remoto via Cloudflare Tunnel
 
-Serviço `cloudflared` no profile `tunnel` expõe a stack sem abrir portas no roteador.
+Serviço `cloudflared` no profile `tunnel` expõe a stack sem abrir portas no roteador. O frontend proxia todas as chamadas API via `/api/*` (same-origin), então só um hostname público é necessário.
 
-1. Em Zero Trust → Networks → Tunnels: criar tunnel, copiar o token, e adicionar 2 public hostnames apontando para `http://frontend:8080` e `http://backend:8000`.
+1. Em Zero Trust → Networks → Tunnels: criar tunnel, copiar o token e adicionar 1 public hostname apontando para `http://frontend:8080`.
 
-2. No `.env`:
+2. Adicionar ao `.env`:
 
 ```env
 CLOUDFLARE_TUNNEL_TOKEN=eyJh...
-NEXT_PUBLIC_BACKEND_URL=https://api.seudominio.com
-CORS_ORIGINS=https://app.seudominio.com
 ```
 
-3. Subir:
+3. Subir: `docker compose --profile tunnel up -d`
 
-```bash
-docker compose build frontend
-docker compose --profile tunnel up -d
-```
-
-`NEXT_PUBLIC_BACKEND_URL` é fixado em build time — trocar a URL pública exige rebuild do frontend. `CORS_ORIGINS` aplica em runtime.
+A mesma imagem do GHCR funciona em qualquer host (localhost, IP da LAN, domínio público) sem rebuild — `BACKEND_INTERNAL_URL` é runtime no container do frontend.
 
 ## Persistência
 

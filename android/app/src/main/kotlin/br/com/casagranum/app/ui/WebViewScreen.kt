@@ -68,9 +68,9 @@ fun WebViewScreen(url: String, onChangeUrl: (String) -> Unit) {
                         loadsImagesAutomatically = true
                         mediaPlaybackRequiresUserGesture = false
                         cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
-                        // Respeita largura natural do dispositivo + meta viewport do site.
-                        useWideViewPort = false
-                        loadWithOverviewMode = false
+                        // true = WebView respeita o <meta viewport> do site (device-width).
+                        useWideViewPort = true
+                        loadWithOverviewMode = true
                         builtInZoomControls = true
                         displayZoomControls = false
                         userAgentString = "$userAgentString CasaGranumApp"

@@ -82,7 +82,7 @@ export function Header() {
             </span>
           )}
 
-          <nav className="-mx-4 flex items-center gap-5 overflow-x-auto px-4 sm:mx-0 sm:gap-7 sm:overflow-visible sm:px-0">
+          <nav className="flex items-center gap-5 overflow-x-auto sm:gap-7 sm:overflow-visible">
             {tabs.map((tab) => {
               const active = tab.active && isActive(tab.href);
               if (!tab.active) {

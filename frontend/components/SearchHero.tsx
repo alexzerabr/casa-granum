@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Home } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { SearchField } from "@/components/SearchField";
 import { fetchCatalogoInfo } from "@/lib/api";
@@ -18,6 +18,7 @@ interface Props {
   value: string;
   onChange: (v: string) => void;
   onSubmit: (objetivo: string) => void;
+  onReset?: () => void;
   isLoading: boolean;
   hasResults: boolean;
 }
@@ -26,6 +27,7 @@ export function SearchHero({
   value,
   onChange,
   onSubmit,
+  onReset,
   isLoading,
   hasResults,
 }: Props) {
@@ -46,6 +48,11 @@ export function SearchHero({
   const handleTag = (tag: string) => {
     onChange(tag);
     onSubmit(tag);
+  };
+
+  const handleReset = () => {
+    onReset?.();
+    requestAnimationFrame(() => inputRef.current?.focus());
   };
 
   return (
@@ -73,7 +80,7 @@ export function SearchHero({
         </p>
       )}
 
-      <div className="mt-6 flex items-center gap-2">
+      <div className="mt-6 flex flex-wrap items-center gap-2">
         <SearchField
           ref={inputRef}
           value={value}
@@ -83,7 +90,7 @@ export function SearchHero({
           autoFocus
           disabled={isLoading}
           ariaLabel="Buscar por objetivo"
-          className="flex-1"
+          className="min-w-[200px] flex-1"
         />
         <button
           type="button"
@@ -103,6 +110,18 @@ export function SearchHero({
             </>
           )}
         </button>
+        {hasResults && onReset && (
+          <button
+            type="button"
+            onClick={handleReset}
+            disabled={isLoading}
+            className="btn btn-secondary"
+            aria-label="Voltar à tela inicial"
+          >
+            <Home className="h-4 w-4" strokeWidth={2} />
+            Início
+          </button>
+        )}
       </div>
 
       {!hasResults && (

@@ -32,6 +32,12 @@ export default function HomePage() {
     setError(null);
   };
 
+  const reset = () => {
+    setObjetivo("");
+    setResults(null);
+    setError(null);
+  };
+
   const hasResults = results !== null && !isLoading;
 
   return (
@@ -43,6 +49,7 @@ export default function HomePage() {
           value={objetivo}
           onChange={setObjetivo}
           onSubmit={runSearch}
+          onReset={reset}
           isLoading={isLoading}
           hasResults={hasResults || isLoading || !!error}
         />

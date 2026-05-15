@@ -256,7 +256,7 @@ export default function RankPage() {
               onChange={setBusca}
               placeholder="Filtrar por nome…"
               ariaLabel="Buscar produto"
-              className="ml-auto min-w-[220px] max-w-sm flex-1"
+              className="w-full sm:ml-auto sm:min-w-[220px] sm:max-w-sm sm:flex-1"
             />
           </div>
 

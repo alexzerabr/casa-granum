@@ -173,7 +173,7 @@ export default function PedidosPage() {
               onChange={setSearch}
               placeholder="Buscar produto, cliente ou telefone…"
               ariaLabel="Buscar pedidos"
-              className="ml-auto min-w-[240px] max-w-sm flex-1"
+              className="w-full sm:ml-auto sm:min-w-[240px] sm:max-w-sm sm:flex-1"
             />
           </div>
 

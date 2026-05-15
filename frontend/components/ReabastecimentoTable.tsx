@@ -37,7 +37,8 @@ export function ReabastecimentoTable({ itens, vazio }: Props) {
   }
 
   return (
-    <div className="overflow-hidden rounded-md border border-wheat bg-cream">
+    <div className="overflow-x-auto rounded-md border border-wheat bg-cream">
+      <div className="min-w-[640px]">
       {/* Header da tabela */}
       <div className="grid grid-cols-[28px_minmax(0,1fr)_120px_120px_140px] items-center gap-x-4 border-b border-wheat bg-creamdeep px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-inkdim">
         <span aria-hidden />
@@ -129,6 +130,7 @@ export function ReabastecimentoTable({ itens, vazio }: Props) {
           );
         })}
       </ol>
+      </div>
     </div>
   );
 }

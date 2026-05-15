@@ -28,7 +28,7 @@ android {
             val storePath = keystoreProps.getProperty("storeFile")
                 ?: System.getenv("KEYSTORE_FILE")
             if (!storePath.isNullOrBlank()) {
-                storeFile = file(storePath)
+                storeFile = rootProject.file(storePath)
                 storePassword = keystoreProps.getProperty("storePassword")
                     ?: System.getenv("KEYSTORE_PASSWORD")
                 keyAlias = keystoreProps.getProperty("keyAlias")

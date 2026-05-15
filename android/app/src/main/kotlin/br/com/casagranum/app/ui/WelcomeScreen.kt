@@ -88,7 +88,7 @@ fun WelcomeScreen(onConnect: (String) -> Unit) {
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Uri,
                 imeAction = ImeAction.Go,
-                autoCorrect = false,
+                autoCorrectEnabled = false,
             ),
             keyboardActions = KeyboardActions(onGo = { submit() }),
         )

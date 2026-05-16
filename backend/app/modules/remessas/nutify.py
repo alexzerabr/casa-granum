@@ -100,7 +100,13 @@ def preco_venda_atual(pro_cod: int) -> Optional[float]:
 
 
 def saidas_desde(pro_cod: int, desde: datetime) -> float:
-    """Soma de unidades vendidas desde `desde` (filtra só vendas confirmadas)."""
+    """Soma de unidades vendidas desde `desde`.
+
+    Filtra por situação processada (`MOI_SIT='S'` + `MOV_SIT='S'`). O cadastro
+    `MOVIMENTOTIPO.MVT_TIP` desta instalação Nutify está inconsistente (todos
+    como 'E'), por isso não dá pra confiar nele — a situação do item é o
+    indicador confiável de venda confirmada.
+    """
     with firebird_connection() as con:
         cur = con.cursor()
         cur.execute(
@@ -108,10 +114,9 @@ def saidas_desde(pro_cod: int, desde: datetime) -> float:
             SELECT COALESCE(SUM(mi.MOI_QTD), 0)
             FROM MOVIMENTOITENS mi
             JOIN MOVIMENTO m ON m.MOV_COD = mi.MOI_MOV
-            JOIN MOVIMENTOTIPO mt ON mt.MVT_COD = m.MOV_OPE
             WHERE mi.MOI_PRO = ?
               AND mi.MOI_SIT = 'S'
-              AND mt.MVT_TIP = 'S'
+              AND m.MOV_SIT = 'S'
               AND mi.MOI_DTE >= ?
             """,
             (pro_cod, desde),

@@ -8,6 +8,7 @@ import { useScanStatus } from "@/lib/useScanStatus";
 const tabs = [
   { label: "Consulta", href: "/", active: true },
   { label: "Reabastecimento", href: "/reabastecimento", active: true },
+  { label: "Remessas", href: "/remessas", active: true },
   { label: "Pedidos", href: "/pedidos", active: true },
   { label: "Rank", href: "/rank", active: true },
 ];

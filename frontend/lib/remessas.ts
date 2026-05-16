@@ -89,6 +89,10 @@ export function concluirManual(id: number): Promise<Remessa> {
   });
 }
 
+export function limparHistorico(): Promise<{ removidas: number }> {
+  return apiFetch("/remessas/historico", { method: "DELETE" });
+}
+
 const SUFIXOS: Record<string, string> = {
   KG: "kg",
   UN: "un",

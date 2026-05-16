@@ -201,3 +201,9 @@ async def concluir_manual(remessa_id: int) -> Remessa:
 @router.post("/run")
 async def run_manual() -> dict:
     return await checker.executar_verificacao()
+
+
+@router.delete("/historico")
+async def limpar_historico() -> dict:
+    removidas = await repository.limpar_historico()
+    return {"removidas": removidas}

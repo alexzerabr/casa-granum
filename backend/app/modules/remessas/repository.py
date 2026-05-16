@@ -118,3 +118,13 @@ async def cancelar(remessa_id: int, motivo: Optional[str]) -> None:
             (_now(), motivo, remessa_id),
         )
         await db.commit()
+
+
+async def limpar_historico() -> int:
+    """Apaga remessas concluídas/canceladas. Retorna nº de linhas removidas."""
+    async with aiosqlite.connect(settings.sqlite_path) as db:
+        cur = await db.execute(
+            "DELETE FROM remessas WHERE estado IN ('concluida','cancelada')"
+        )
+        await db.commit()
+        return cur.rowcount or 0

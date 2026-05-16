@@ -1,5 +1,6 @@
 "use client";
 
+import { Check, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -8,6 +9,7 @@ import { RemessaCard } from "@/components/RemessaCard";
 import {
   cancelarRemessa,
   concluirManual,
+  limparHistorico,
   listarRemessas,
   type Remessa,
 } from "@/lib/remessas";
@@ -22,6 +24,8 @@ export default function RemessasPage() {
   const [remessas, setRemessas] = useState<Remessa[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalAberto, setModalAberto] = useState(false);
+  const [confirmandoLimpar, setConfirmandoLimpar] = useState(false);
+  const [limpando, setLimpando] = useState(false);
 
   const recarregar = useCallback(async () => {
     try {
@@ -78,6 +82,23 @@ export default function RemessasPage() {
     }
   };
 
+  const handleLimparHistorico = async () => {
+    setLimpando(true);
+    try {
+      await limparHistorico();
+      setConfirmandoLimpar(false);
+      await recarregar();
+    } catch (err) {
+      alert(`Falha ao limpar: ${err instanceof Error ? err.message : "erro"}`);
+    } finally {
+      setLimpando(false);
+    }
+  };
+
+  useEffect(() => {
+    if (aba !== "historico") setConfirmandoLimpar(false);
+  }, [aba]);
+
   return (
     <div className="relative flex min-h-screen flex-col">
       <Header />
@@ -104,7 +125,7 @@ export default function RemessasPage() {
             </button>
           </div>
 
-          <div className="mb-5 flex items-center gap-3">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
             <div className="segment" role="group" aria-label="Aba">
               <button
                 type="button"
@@ -118,9 +139,48 @@ export default function RemessasPage() {
                 className={aba === "historico" ? "is-active" : ""}
                 onClick={() => setAba("historico")}
               >
-                Histórico
+                Histórico {historico.length > 0 && `(${historico.length})`}
               </button>
             </div>
+
+            {aba === "historico" && historico.length > 0 && (
+              confirmandoLimpar ? (
+                <span className="flex items-center gap-2">
+                  <span className="text-xs text-inkdim">
+                    Apagar {historico.length} {historico.length === 1 ? "registro" : "registros"}?
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleLimparHistorico}
+                    disabled={limpando}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-danger bg-cream px-2.5 text-xs font-semibold text-danger hover:bg-danger hover:text-cream disabled:opacity-55"
+                    title="Confirmar limpeza"
+                  >
+                    <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
+                    Confirmar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmandoLimpar(false)}
+                    disabled={limpando}
+                    className="inline-flex h-8 items-center gap-1 rounded-md border border-wheat px-2 text-xs text-inkmuted hover:border-ink hover:text-ink disabled:opacity-55"
+                    title="Cancelar"
+                  >
+                    <X className="h-3.5 w-3.5" strokeWidth={2.5} />
+                  </button>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmandoLimpar(true)}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-wheat bg-cream px-2.5 text-xs font-semibold text-inkmuted hover:border-danger hover:text-danger"
+                  title="Apagar todo o histórico"
+                >
+                  <Trash2 className="h-3.5 w-3.5" strokeWidth={2.5} />
+                  Limpar logs
+                </button>
+              )
+            )}
           </div>
 
           {loading ? (

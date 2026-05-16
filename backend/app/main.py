@@ -10,7 +10,7 @@ from app.db.firebird import ping as firebird_ping
 from app.db.sqlite import init_db
 from app.modules.monitor import checker, scan_state
 from app.modules.monitor.scheduler import start_scheduler, stop_scheduler
-from app.routers import clientes, pedidos, rank, reabastecimento, recomendacoes
+from app.routers import clientes, pedidos, rank, reabastecimento, recomendacoes, remessas
 
 logging.basicConfig(
     level=logging.INFO,
@@ -67,6 +67,7 @@ app.include_router(pedidos.router)
 app.include_router(clientes.router)
 app.include_router(rank.router)
 app.include_router(reabastecimento.router)
+app.include_router(remessas.router)
 
 
 @app.get("/health")

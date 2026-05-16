@@ -39,25 +39,48 @@ def _formatar_mensagem(produto: dict) -> str:
 
 def enviar_alerta(produto: dict) -> bool:
     """Retorna True se enviou, False se não configurado ou se falhou."""
-    if not settings.telegram_bot_token or not settings.telegram_chat_id:
-        logger.info(
-            "telegram não configurado — pulando alerta de %s", produto.get("pro_des")
-        )
-        return False
+    return _enviar(_formatar_mensagem(produto), produto.get("pro_des"))
 
+
+def _formatar_mensagem_remessa(r: dict) -> str:
+    und = r.get("unidade") or "KG"
+    consumo_pct = float(r.get("consumo_pct") or 0) * 100
+    vendido = float(r.get("vendido") or 0)
+    linhas = [
+        "🏷 *Atualizar preço — Casa Granum*",
+        "",
+        f"Produto: *{r['pro_des']}*",
+        f"Consumo do estoque antigo: {consumo_pct:.0f}% "
+        f"({formatar(vendido, und)} de {formatar(float(r['estoque_antigo']), und)})",
+        "",
+        f"Custo: R$ {float(r['custo_antigo']):.2f} → R$ {float(r['custo_novo']):.2f}",
+        f"Preço atual: R$ {float(r['preco_antigo']):.2f}",
+        f"Preço sugerido: *R$ {float(r['preco_sugerido']):.2f}*",
+    ]
+    return "\n".join(linhas)
+
+
+def enviar_alerta_remessa(remessa: dict) -> bool:
+    return _enviar(_formatar_mensagem_remessa(remessa), remessa.get("pro_des"))
+
+
+def _enviar(texto: str, label: str | None) -> bool:
+    if not settings.telegram_bot_token or not settings.telegram_chat_id:
+        logger.info("telegram não configurado — pulando alerta de %s", label)
+        return False
     url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
     try:
         resp = httpx.post(
             url,
             json={
                 "chat_id": settings.telegram_chat_id,
-                "text": _formatar_mensagem(produto),
+                "text": texto,
                 "parse_mode": "Markdown",
             },
             timeout=10.0,
         )
         resp.raise_for_status()
-        logger.info("telegram alert enviado para %s", produto.get("pro_des"))
+        logger.info("telegram enviado para %s", label)
         return True
     except httpx.HTTPError as exc:
         logger.error("falha ao enviar telegram: %s", exc)

@@ -13,6 +13,7 @@ from app.config import settings
 from app.modules import backup
 from app.modules.monitor import checker, scan_state
 from app.modules.recommendations import catalog
+from app.modules.remessas import scheduler as remessas_scheduler
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,7 @@ def start_scheduler() -> AsyncIOScheduler:
         id="sqlite_backup",
         replace_existing=True,
     )
+    remessas_scheduler.register(_scheduler)
     _scheduler.start()
     logger.info(
         "scheduler iniciado — monitor=%dmin · catalog_refresh=%ds · backup=24h (retention=%d)",

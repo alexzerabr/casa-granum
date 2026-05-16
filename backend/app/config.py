@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     stock_alert_factor: float = 1.1
     stock_restore_factor: float = 1.5
 
+    # Remessas: alerta quando consumo do estoque antigo atinge (1 - threshold).
+    stock_preco_alert_pct: float = 0.20
+    remessa_check_minutes: int = 5
+
     catalog_refresh_seconds: int = 60
 
     cache_ttl_hours: int = 24

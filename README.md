@@ -2,12 +2,13 @@
 
 Sistema integrado para a Casa Granum (loja de granéis e produtos naturais).
 
-Quatro abas:
+Cinco abas:
 
 1. **Consulta por Objetivo** — recomendação de produtos por necessidade do cliente, via LLM (Gemini por padrão; OpenAI/Anthropic opcionais, com fallback) sobre o catálogo do Nutify PDV. A IA só considera produtos com texto de benefícios cadastrado (`PRO_BCO`); o catálogo cresce conforme o lojista preenche o campo no Nutify.
 2. **Lista de Reabastecimento** — monitoramento contínuo de estoque mínimo no Firebird (Nutify PDV) com alerta no Telegram.
-3. **Pedidos de Clientes** — CRUD para pedidos pontuais; cada pedido aceita vários solicitantes (nome + telefone), com busca de cliente direto no cadastro do Nutify (autopreenche o telefone).
-4. **Rank** — produtos mais vendidos a partir do histórico de saídas do Nutify; filtros por período/grupo, ordenação por quantidade/valor/nº de vendas, gráfico por produto, variação vs. período anterior e export CSV.
+3. **Remessas** — quando chega mercadoria com custo diferente, registra snapshot do estoque/custo/preço atual. Acompanha consumo do "estoque antigo" via saídas no PDV e dispara alerta (UI + Telegram) com preço sugerido (markup constante, arredondado pra próximo par+,01) quando restam ≤20%.
+4. **Pedidos de Clientes** — CRUD para pedidos pontuais; cada pedido aceita vários solicitantes (nome + telefone), com busca de cliente direto no cadastro do Nutify (autopreenche o telefone).
+5. **Rank** — produtos mais vendidos a partir do histórico de saídas do Nutify; filtros por período/grupo, ordenação por quantidade/valor/nº de vendas, gráfico por produto, variação vs. período anterior e export CSV.
 
 ## Stack
 

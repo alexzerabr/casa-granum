@@ -82,7 +82,8 @@ CREATE TABLE IF NOT EXISTS remessas (
   concluida_em          DATETIME,
   cancelada_em          DATETIME,
   motivo_cancelamento   TEXT,
-  preco_final           REAL
+  preco_final           REAL,
+  vendas_baseline       REAL NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_remessas_estado_pro ON remessas (estado, pro_cod);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_remessa_ativa_por_produto
@@ -123,6 +124,7 @@ async def init_db() -> None:
             )
 
         await _migrar_pedidos_legados(db)
+        await _migrar_remessas_baseline(db)
         await db.commit()
 
         cur = await db.execute(
@@ -130,6 +132,41 @@ async def init_db() -> None:
         )
         contagens = {row[0]: row[1] for row in await cur.fetchall()}
         logger.info("sqlite estado lista_reabastecimento: %s", contagens or "vazio")
+
+
+async def _migrar_remessas_baseline(db: aiosqlite.Connection) -> None:
+    """Adiciona coluna vendas_baseline; reseta ativas pré-migração com o total atual."""
+    cursor = await db.execute("PRAGMA table_info(remessas)")
+    cols = {row[1] for row in await cursor.fetchall()}
+    if "vendas_baseline" in cols:
+        return
+    await db.execute(
+        "ALTER TABLE remessas ADD COLUMN vendas_baseline REAL NOT NULL DEFAULT 0"
+    )
+    cur = await db.execute(
+        "SELECT id, pro_cod FROM remessas WHERE estado IN ('ativa','alerta_preco')"
+    )
+    pendentes = await cur.fetchall()
+    if not pendentes:
+        return
+    import asyncio
+
+    from app.modules.remessas import nutify
+
+    for remessa_id, pro_cod in pendentes:
+        try:
+            total = await asyncio.to_thread(nutify.vendas_acumuladas, int(pro_cod))
+        except Exception:
+            logger.warning(
+                "migração remessas: falha lendo Firebird pro_cod=%s — baseline fica 0",
+                pro_cod,
+            )
+            continue
+        await db.execute(
+            "UPDATE remessas SET vendas_baseline = ? WHERE id = ?",
+            (total, remessa_id),
+        )
+    logger.info("migração remessas: baseline resetada pra %d ativas", len(pendentes))
 
 
 async def _migrar_pedidos_legados(db: aiosqlite.Connection) -> None:

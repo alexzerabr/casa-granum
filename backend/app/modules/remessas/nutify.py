@@ -99,6 +99,29 @@ def preco_venda_atual(pro_cod: int) -> Optional[float]:
         return float(row[0]) if row and row[0] is not None else None
 
 
+def vendas_acumuladas(pro_cod: int) -> float:
+    """Total histórico de vendas confirmadas do produto. Usado como baseline da remessa.
+
+    Tirar diferenças entre 2 leituras (`acumulado_agora − baseline_no_inicio`) substitui
+    qualquer filtro por data — imune à precisão de `MOI_DTE` que é apenas DATE no Nutify.
+    """
+    with firebird_connection() as con:
+        cur = con.cursor()
+        cur.execute(
+            """
+            SELECT COALESCE(SUM(mi.MOI_QTD), 0)
+            FROM MOVIMENTOITENS mi
+            JOIN MOVIMENTO m ON m.MOV_COD = mi.MOI_MOV
+            WHERE mi.MOI_PRO = ?
+              AND mi.MOI_SIT = 'S'
+              AND m.MOV_SIT = 'S'
+            """,
+            (pro_cod,),
+        )
+        row = cur.fetchone()
+        return float(row[0] or 0)
+
+
 def saidas_desde(pro_cod: int, desde: datetime) -> float:
     """Soma de unidades vendidas desde `desde`.
 

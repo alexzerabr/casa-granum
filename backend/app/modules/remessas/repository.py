@@ -61,8 +61,8 @@ async def criar(data: dict) -> int:
               (pro_cod, pro_des, unidade,
                estoque_antigo, custo_antigo, preco_antigo, markup_pct,
                custo_novo, preco_sugerido, alerta_threshold_pct,
-               estado, iniciada_em)
-            VALUES (?,?,?, ?,?,?,?, ?,?,?, 'ativa', ?)
+               estado, iniciada_em, vendas_baseline)
+            VALUES (?,?,?, ?,?,?,?, ?,?,?, 'ativa', ?, ?)
             """,
             (
                 data["pro_cod"],
@@ -76,6 +76,7 @@ async def criar(data: dict) -> int:
                 data["preco_sugerido"],
                 data["alerta_threshold_pct"],
                 _now(),
+                data["vendas_baseline"],
             ),
         )
         await db.commit()

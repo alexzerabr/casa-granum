@@ -85,16 +85,18 @@ def _now() -> datetime:
 
 
 async def _enriquecer(r: dict) -> dict:
-    """Adiciona vendido + consumo_pct (lendo Firebird)."""
+    """Adiciona vendido + consumo_pct (lendo Firebird).
+
+    vendido = vendas_acumuladas_agora − vendas_baseline (snapshot da criação).
+    Substitui filtro por data — MOI_DTE no Nutify é DATE, sem hora, daí vendas
+    do mesmo dia anteriores à criação vazariam.
+    """
     estoque_antigo = float(r["estoque_antigo"]) or 0.0
     if r["estado"] in ("ativa", "alerta_preco") and estoque_antigo > 0:
-        iniciada = datetime.fromisoformat(r["iniciada_em"])
-        if iniciada.tzinfo is None:
-            iniciada = iniciada.replace(tzinfo=timezone.utc)
-        vendido = await asyncio.to_thread(nutify.saidas_desde, r["pro_cod"], iniciada)
+        acumulado = await asyncio.to_thread(nutify.vendas_acumuladas, r["pro_cod"])
+        vendido = max(0.0, acumulado - float(r["vendas_baseline"]))
         consumo = min(vendido / estoque_antigo, 1.0)
     else:
-        # Concluida/cancelada: congela em 100% pra UI ficar consistente.
         vendido = estoque_antigo if r["estado"] == "concluida" else 0.0
         consumo = 1.0 if r["estado"] == "concluida" else 0.0
     return {**r, "vendido": vendido, "consumo_pct": consumo}
@@ -145,6 +147,7 @@ async def criar(req: RemessaCreate) -> Remessa:
     snap = await asyncio.to_thread(nutify.snapshot_produto, req.pro_cod)
     if snap is None:
         raise HTTPException(status_code=404, detail="produto não monitorável")
+    baseline = await asyncio.to_thread(nutify.vendas_acumuladas, req.pro_cod)
     preco_sugerido = pricing.sugerir_preco(req.novo_custo, snap["markup_pct"])
     data = {
         "pro_cod": snap["pro_cod"],
@@ -157,6 +160,7 @@ async def criar(req: RemessaCreate) -> Remessa:
         "custo_novo": req.novo_custo,
         "preco_sugerido": preco_sugerido,
         "alerta_threshold_pct": settings.stock_preco_alert_pct,
+        "vendas_baseline": baseline,
     }
     novo_id = await repository.criar(data)
     criada = await repository.obter(novo_id)

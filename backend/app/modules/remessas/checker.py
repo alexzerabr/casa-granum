@@ -41,14 +41,6 @@ async def executar_verificacao() -> dict:
     concluidas = 0
 
     for r in ativas:
-        try:
-            iniciada = datetime.fromisoformat(r["iniciada_em"])
-            if iniciada.tzinfo is None:
-                iniciada = iniciada.replace(tzinfo=timezone.utc)
-        except (TypeError, ValueError):
-            logger.warning("remessa %s tem iniciada_em inválido — pulando", r["id"])
-            continue
-
         # 1) Detectar mudança de preço → conclui.
         preco_agora = nutify.preco_venda_atual(r["pro_cod"])
         if preco_agora is not None and abs(preco_agora - float(r["preco_antigo"])) > 1e-6:
@@ -56,11 +48,12 @@ async def executar_verificacao() -> dict:
             concluidas += 1
             continue
 
-        # 2) Verificar consumo do estoque antigo.
-        vendido = nutify.saidas_desde(r["pro_cod"], iniciada)
+        # 2) Verificar consumo: acumulado_agora − baseline (snapshot da criação).
         estoque_antigo = float(r["estoque_antigo"])
         if estoque_antigo <= 0:
             continue
+        acumulado = nutify.vendas_acumuladas(r["pro_cod"])
+        vendido = max(0.0, acumulado - float(r["vendas_baseline"]))
         consumo_pct = min(vendido / estoque_antigo, 1.0)
         threshold = float(r["alerta_threshold_pct"])
 

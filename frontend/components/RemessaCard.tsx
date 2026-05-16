@@ -75,6 +75,8 @@ export function RemessaCard({ remessa, onCancelar, onConcluir }: Props) {
             <span className="font-semibold text-ink">
               R$ {remessa.custo_novo.toFixed(2)}
             </span>
+            {" · "}
+            <span className="text-inkmuted">desde {formatarData(remessa.iniciada_em)}</span>
           </p>
         </div>
         <button

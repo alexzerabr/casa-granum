@@ -62,6 +62,31 @@ CREATE TABLE IF NOT EXISTS pedido_cliente (
   FOREIGN KEY (pedido_id) REFERENCES pedido(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_pedido_cliente_pedido ON pedido_cliente (pedido_id);
+
+CREATE TABLE IF NOT EXISTS remessas (
+  id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+  pro_cod               INTEGER NOT NULL,
+  pro_des               TEXT NOT NULL,
+  unidade               TEXT NOT NULL,
+  estoque_antigo        REAL NOT NULL,
+  custo_antigo          REAL NOT NULL,
+  preco_antigo          REAL NOT NULL,
+  markup_pct            REAL NOT NULL,
+  custo_novo            REAL NOT NULL,
+  preco_sugerido        REAL NOT NULL,
+  alerta_threshold_pct  REAL NOT NULL DEFAULT 0.20,
+  estado                TEXT NOT NULL DEFAULT 'ativa',
+  iniciada_em           DATETIME NOT NULL,
+  alertada_em           DATETIME,
+  notificada_em         DATETIME,
+  concluida_em          DATETIME,
+  cancelada_em          DATETIME,
+  motivo_cancelamento   TEXT,
+  preco_final           REAL
+);
+CREATE INDEX IF NOT EXISTS idx_remessas_estado_pro ON remessas (estado, pro_cod);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_remessa_ativa_por_produto
+  ON remessas (pro_cod) WHERE estado IN ('ativa', 'alerta_preco');
 """
 
 

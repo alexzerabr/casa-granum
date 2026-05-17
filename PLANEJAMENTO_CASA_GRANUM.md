@@ -1,142 +1,136 @@
-# Prompt de Planejamento — Sistema Casa Granum
+# Sistema Casa Granum — Documento Técnico
 
-## Visão Geral do Projeto
+> Documento de referência do estado atual do sistema. Para instruções operacionais
+> (rodar, deploy, backup), ver [`README.md`](./README.md). Para variáveis de ambiente,
+> ver [`.env.example`](./.env.example).
+>
+> Última atualização: 2026-05-17 — após Round 2 de robustez do módulo Remessas.
 
-Desenvolver um sistema web integrado para a **Casa Granum**, loja de produtos a granel. A aplicação possui três módulos principais, acessíveis por abas:
+---
+
+## Visão Geral
+
+Sistema web integrado para a **Casa Granum** (loja de granéis e produtos naturais),
+composto por **5 abas**:
 
 | Aba | Nome | Público | Função |
 |---|---|---|---|
-| 1ª | **Consultar por Objetivo** | Clientes / Atendentes | IA recomenda produtos com base em objetivo informado |
-| 2ª | **Lista de Reabastecimento** | Equipe interna | Produtos com estoque abaixo do mínimo aguardando reposição |
-| 3ª | **Pedidos de Clientes** | Funcionários | Registro manual de pedidos solicitados por clientes |
+| 1 | **Consulta por Objetivo** | Clientes / Atendentes | LLM recomenda produtos por necessidade descrita em linguagem natural |
+| 2 | **Lista de Reabastecimento** | Equipe interna | Produtos com estoque abaixo do mínimo, com alerta Telegram |
+| 3 | **Remessas** | Equipe interna | Controle de "estoque antigo" quando chega mercadoria com custo diferente; sugere preço novo e alerta quando é hora de atualizar |
+| 4 | **Pedidos de Clientes** | Funcionários | Registro de pedidos pontuais; cada pedido aceita vários solicitantes |
+| 5 | **Rank** | Equipe interna | Produtos mais vendidos a partir do histórico do Nutify; filtros, gráfico, export CSV |
 
-O backend integra com o banco **Firebird 3.0** (sistema Nutify PDV, Delphi/Windows) para leitura de estoque e benefícios dos produtos. Toda a escrita de dados da aplicação (cache, listas, pedidos) é feita em banco **SQLite local**, pois o acesso ao Firebird é **somente leitura**.
-
----
-
-## Acesso ao Banco de Dados Firebird
-
-- **SGBD:** Firebird 3.0 com `WireCrypt` habilitado
-- **Host:** ver `.env` (variável `FB_HOST` — IP/host do servidor Nutify PDV na rede local)
-- **Porta:** `3050`
-- **Database:** caminho do `.FDB` no servidor — ver `.env` (`FB_DATABASE`)
-- **Usuário/Senha:** ver `.env` (`FB_USER` / `FB_PASSWORD`) — usuário dedicado, somente leitura
-- **Charset:** `ISO8859_1` → converter sempre para UTF-8 na aplicação
-- **Acesso:** somente leitura — toda persistência da aplicação usa SQLite local
-- **Driver:** `python-firebird-driver` com `libfbclient.so` nativo (suporte a WireCrypt)
-
-> Conexão WSL2 → Firebird já validada e funcional com cliente nativo Linux.
+Backend lê do **Firebird 3.0** (Nutify PDV, Windows) em **modo somente-leitura**.
+Toda a escrita acontece em **SQLite local** (cache da IA, lista de reabastecimento,
+pedidos, remessas).
 
 ---
 
-## Mapeamento do Banco de Dados
+## Stack
 
-### Tabela `PRODUTO` — campos utilizados
+### Backend — Python 3.12 + FastAPI
+| Pacote | Uso |
+|---|---|
+| `firebird-driver` | Conexão Firebird 3.0 com WireCrypt via `libfbclient.so` nativo |
+| `google-genai` | Provider primário da Aba 1 (Gemini) |
+| `openai` / `anthropic` | Providers alternativos (carregados sob demanda) |
+| `python-telegram-bot` v21+ | Alertas das abas 2 e 3 |
+| `APScheduler` | Schedulers: monitor de estoque (5 min) e verificador de remessas (5 min) |
+| `aiosqlite` | Persistência local |
+| `fastapi` + `uvicorn` | API REST (docs em `/docs`, health em `/health`) |
+| `pydantic-settings` | Configuração tipada via `.env` |
+
+### Frontend — Next.js 14 + Tailwind v3
+- App Router, modo standalone para deploy em container
+- Proxy `/api/*` via Route Handler (não `next.config rewrites` — em standalone esses são bakeados em build time)
+- Polling: 30 s normal; 5 s quando há alerta ativo (Remessas)
+
+### App Android
+- Kotlin + Jetpack Compose envelopando WebView
+- Build via GitHub Actions disparado por tag `android-v*`
+- Detalhes em [`android/README.md`](android/README.md)
+
+### Deploy
+- Docker Compose; imagens publicadas em **GHCR** via GitHub Actions (`docker-publish.yml`)
+- Serviço opcional `cloudflared` (profile `tunnel`) para acesso remoto sem abrir portas
+- SQLite em **volume nomeado** (`casagranum_data`) — sobrevive a `down`/`pull`/`up`
+
+---
+
+## Banco Firebird — campos reais
+
+> ⚠️ **Correção importante:** versões iniciais deste documento mapearam `PRO_MIX` /
+> `PRO_MIA` como flags de estoque mínimo. **Inspeção direta no banco mostrou que esse
+> não é o caso.** Os campos reais são abaixo.
+
+### `PRODUTO` — campos utilizados
 
 | Campo | Tipo | Descrição |
 |---|---|---|
 | `PRO_COD` | INTEGER | Código único do produto |
 | `PRO_DES` | VARCHAR(80) | Nome do produto |
 | `PRO_SIT` | CHAR(1) | `'A'` = Ativo |
-| `PRO_IDB` | CHAR(1) | **Integração com balança:** `'S'` = sim — 463 produtos ativos |
-| `PRO_MIX` | CHAR(1) | **Flag de estoque mínimo configurado:** `'S'` = sim (configurado no Nutify PDV) |
-| `PRO_MIA` | VARCHAR(255) | **Valor do estoque mínimo em KG** (ex: `"1.500"`) — gerenciado pelo Nutify PDV |
-| `PRO_PMC` | INT64 | Quantidade mínima sugerida de reposição |
-| `PRO_QTD` | NUMERIC(15,5) | **Estoque atual em KG** |
-| `PRO_VLC` | NUMERIC(15,5) | Preço de venda por KG |
+| `PRO_IDB` | CHAR(1) | `'S'` = integração com balança (463 produtos ativos) |
+| `PRO_EMN` | DECIMAL | **Estoque mínimo** — campo real (449 produtos com `PRO_EMN > 0`) |
+| `PRO_QTD` | NUMERIC(15,5) | Estoque atual (na unidade de venda) |
+| `PRO_VLC` | NUMERIC(15,5) | Custo unitário atual |
+| `PRO_UND` | VARCHAR(10) | Unidade de **venda** (KG / UN / CAPS) — `PRO_EMN`, `PRO_QTD`, `MOI_QTD` estão nesta unidade |
+| `PRO_UNDE` | VARCHAR(10) | Unidade de **compra** (KG / UN / CX) — pode diferir de `PRO_UND` |
 | `PRO_GRU` | INTEGER | FK → `GRUPO.GRU_COD` |
-| `PRO_UND` | VARCHAR(10) | Unidade de medida (ex: `'KG'`) |
-| `PRO_BCO` | BLOB TEXT | **Benefícios e descrição** (texto livre em ISO8859-1) — base para a IA |
+| `PRO_BCO` | BLOB TEXT (ISO8859-1) | Benefícios — base para a IA (~168 produtos preenchidos) |
 
-### Tabela `GRUPO`
+### `PAUTA` / `PAUTAPRODUTO` — preço de venda
 
-| Campo | Descrição |
-|---|---|
-| `GRU_COD` | PK |
-| `GRU_DES` | Nome do grupo (ex: `'GRANEL'`, `'CHÁS'`) |
+- Apenas **uma pauta ativa**: `PTA_COD = 1` ("PAUTA PADRÃO (PREÇO LOJA)").
+- `PAUTAPRODUTO` (PK composta `PTP_PTA + PTP_PRO`):
+  - `PTP_VLR` = preço de venda (segue padrão *par + ,01* — ex.: 88.01, 110.01).
+  - `PTP_PRC` = markup % sobre custo.
 
-### Validação real no banco — Gengibre em Pó (`PRO_COD = 4`)
+### `MOVIMENTOITENS` + `MOVIMENTO` — vendas
 
-```
-PRO_COD  = 4
-PRO_DES  = GENGIBRE EM PÓ
-PRO_QTD  = 3.600 KG          ← estoque atual
-PRO_MIX  = 'N'               ← mínimo ainda não configurado no Nutify PDV
-PRO_MIA  = NULL              ← valor mínimo (preencher no Nutify para ativar monitoramento)
-PRO_PMC  = 0
-PRO_IDB  = 'S'               ← integrado à balança ✓
-PRO_UND  = 'KG'
-PRO_VLC  = 37.40
-PRO_BCO  = "O gengibre em pó é obtido da raiz do Zingiber officinale...
-             Ação anti-inflamatória... Propriedade termogênica...
-             Pode auxiliar no alívio de enjoos, náuseas e desconfortos digestivos..."
-```
+- Indicador confiável de venda confirmada: `MOI_SIT='S' AND MOV_SIT='S'`.
+- ⚠️ `MOVIMENTOTIPO.MVT_TIP` está inconsistente nesta instalação (todos 'E', mesmo
+  em vendas). **Não usar** essa coluna para distinguir entrada/saída.
+- `MOI_QTD` está na **unidade de venda** do produto (`PRO_UND`).
+- `MOI_DTE` é DATE (sem hora) — para baseline de vendas usar `acumulado_agora −
+  baseline_no_inicio` em vez de filtro por data (evita vazamento no dia da criação).
 
-> **Nota operacional:** `PRO_MIX`, `PRO_MIA` e `PRO_PMC` possuem tela de configuração no Nutify PDV. Para ativar o monitoramento de um produto, o operador deve habilitar o flag e informar o valor mínimo no cadastro do produto. A aplicação monitora automaticamente todos os produtos onde `PRO_IDB = 'S'` AND `PRO_MIX = 'S'` AND `PRO_MIA IS NOT NULL`.
-
-### Exemplos reais de `PRO_BCO` (base para IA)
-
-- **Ginseng em Pó:** "Ação adaptógena... melhora do foco, concentração e desempenho cognitivo... Ação imunomoduladora..."
-- **Guaraná em Pó:** "Ação estimulante do sistema nervoso central... Propriedade termogênica... Ação antioxidante..."
-- O campo `PRO_BCO` está preenchido para ~200-300 produtos ativos. Produtos sem esse campo não participam das recomendações por IA.
-
-### Queries base
-
-**Monitor de estoque mínimo:**
-```sql
-SELECT
-  p.PRO_COD,
-  p.PRO_DES,
-  p.PRO_QTD                        AS estoque_atual_kg,
-  CAST(p.PRO_MIA AS DECIMAL(10,3)) AS estoque_minimo_kg,
-  p.PRO_PMC                        AS qtd_reposicao,
-  g.GRU_DES                        AS grupo
-FROM PRODUTO p
-JOIN GRUPO g ON g.GRU_COD = p.PRO_GRU
-WHERE p.PRO_SIT = 'A'
-  AND p.PRO_IDB = 'S'
-  AND p.PRO_MIX = 'S'
-  AND p.PRO_MIA IS NOT NULL
-  AND CAST(p.PRO_MIA AS DECIMAL(10,3)) > 0
-ORDER BY p.PRO_DES
-```
-
-**Catálogo para IA:**
-```sql
-SELECT
-  p.PRO_COD,
-  p.PRO_DES       AS nome,
-  p.PRO_VLC       AS preco_kg,
-  p.PRO_QTD       AS estoque_kg,
-  g.GRU_DES       AS grupo,
-  p.PRO_BCO       AS beneficios
-FROM PRODUTO p
-JOIN GRUPO g ON g.GRU_COD = p.PRO_GRU
-WHERE p.PRO_SIT = 'A'
-  AND p.PRO_BCO IS NOT NULL
-ORDER BY p.PRO_DES
-```
+### Conexão
+- WireCrypt obrigatório — só `libfbclient.so` nativo conecta (pure-JS é rejeitado).
+- Charset Firebird `ISO8859_1` → converter sempre para UTF-8 na aplicação.
+- BLOB decode: `bytes.decode('iso-8859-1')` direto.
 
 ---
 
-## Aba 1 — Consultar por Objetivo (IA)
+## Aba 1 — Consulta por Objetivo
 
-### Objetivo
-O usuário informa um objetivo em linguagem natural e a IA cruza as informações de benefícios dos produtos (`PRO_BCO`) para retornar as melhores recomendações com justificativa.
+**Status:** implementado.
 
 ### Fluxo
-1. Usuário digita objetivo: _"quero emagrecer"_, _"tenho ansiedade"_, _"melhorar memória"_
-2. Backend carrega catálogo com benefícios do Firebird (com cache)
-3. Claude API (`claude-sonnet-4-6`) analisa o catálogo e retorna produtos relevantes
-4. Frontend exibe cards: nome do produto, benefícios relacionados ao objetivo, preço por 100g, disponibilidade em estoque
+1. Usuário descreve objetivo em linguagem natural ("emagrecer", "ansiedade",
+   "imunidade").
+2. Backend carrega catálogo (produtos com `PRO_BCO` preenchido) com refresh a cada
+   60 s (`CATALOG_REFRESH_SECONDS`).
+3. LLM analisa e retorna recomendações com justificativa.
+4. Resposta volta como JSON estruturado e é cacheada em SQLite por 24 h
+   (`CACHE_TTL_HOURS`).
 
-### Regras de Negócio
-- Objetivos iguais ou similares retornam do cache SQLite (TTL: 24h)
-- Cache é invalidado quando o catálogo de produtos for atualizado no banco (verificar via hash do catálogo)
-- Produtos sem estoque (`PRO_QTD = 0`) são marcados como indisponíveis, mas ainda aparecem na recomendação
-- Usar **prompt caching** da Anthropic para o catálogo — o bloco de produtos fica em cache no modelo, reduzindo custo em até 90% nas chamadas repetidas
+### LLM multi-provider
+Provider configurável + fallback opcional:
 
-### Schema SQLite
+| Variável | Default | Notas |
+|---|---|---|
+| `LLM_PROVIDER` | `gemini` | `gemini` \| `openai` \| `anthropic` |
+| `LLM_FALLBACK` | *(vazio)* | Usado se o primário falhar (5xx, rate limit, chave ausente) |
+| `GEMINI_MODEL` | `gemini-2.5-flash` | |
+| `OPENAI_MODEL` | `gpt-4.1-mini` | Structured output via `json_schema` strict |
+| `ANTHROPIC_MODEL` | `claude-haiku-4-5` | Tool_use + prompt caching do catálogo |
+
+Os SDKs `openai`/`anthropic` são carregados sob demanda — provider não configurado
+não impede o startup.
+
+### Cache
 ```sql
 CREATE TABLE recomendacao_cache (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -149,460 +143,350 @@ CREATE TABLE recomendacao_cache (
 );
 ```
 
+Invalidação: mudança no `catalogo_hash` (produto novo, edição de `PRO_BCO`).
+
+### Endpoints
+- `GET /recomendacoes/info` — tamanho do catálogo e provider configurado
+- `POST /recomendacoes` — body `{ "objetivo": "..." }`
+
 ---
 
 ## Aba 2 — Lista de Reabastecimento
 
-### Objetivo
-Exibir em tempo real os produtos com estoque abaixo do mínimo configurado. Quando um produto entra na lista, um alerta é enviado via Telegram. O produto sai da lista automaticamente quando o estoque for reposto.
+**Status:** implementado.
 
-### Regras de Negócio
-1. **Critério de entrada na lista:** `PRO_QTD <= CAST(PRO_MIA AS DECIMAL) * fator_alerta`
-   - Fator padrão: `1.1` (alerta com 10% de margem acima do mínimo)
-   - Exemplo: mínimo = 1,000 kg → alerta quando `PRO_QTD <= 1,100 kg`
-2. **Alerta único:** ao entrar na lista, envia alerta Telegram uma única vez. Nenhum novo alerta até reposição.
-3. **Critério de saída da lista:** `PRO_QTD > CAST(PRO_MIA AS DECIMAL) * fator_reposicao`
-   - Fator padrão: `1.5`
-4. **Verificação periódica:** a cada 5 minutos (configurável via `MONITOR_INTERVAL_MINUTES`); cooldown de 24 h por produto evita re-disparo de Telegram em restarts
-5. A lista exibe apenas os itens **atualmente pendentes**, sem histórico
+### Critério de entrada/saída
+| Transição | Condição |
+|---|---|
+| `ok → alerta_enviado` | `PRO_QTD <= PRO_EMN * STOCK_ALERT_FACTOR` (default 1.1) |
+| `alerta_enviado → ok` | `PRO_QTD > PRO_EMN * STOCK_RESTORE_FACTOR` (default 1.5) |
 
-### O que exibir na interface (por produto)
-- Nome do produto
-- Grupo (ex: CHÁS, GRANEL)
-- **Estoque atual em KG** — campo `PRO_QTD` atualizado a cada polling
-- Estoque mínimo configurado (`PRO_MIA`)
-- Data e hora em que entrou na lista
-- Status visual: 🔴 Crítico (abaixo do mínimo) / 🟡 Alerta (abaixo do limite com margem)
-- Atualização automática da interface a cada 60 segundos (polling)
+### Schedulers e garantias
+- Verificação a cada `MONITOR_INTERVAL_MINUTES` (default 5).
+- Telegram **único** por transição (idempotente). Cooldown de 24 h por produto via
+  `notificado_em` — sobrevive a restart.
+- Lista vista pela UI sempre filtra produtos ainda monitorados no Firebird
+  (auto-limpeza de produtos desativados).
 
-### Mensagem Telegram
-```
-🔴 *Estoque Mínimo Atingido — Casa Granum*
-
-📦 Produto: GENGIBRE EM PÓ
-📁 Grupo: CHÁS/ERVAS
-⚖️ Estoque atual: 0,950 kg
-🎯 Estoque mínimo: 1,000 kg
-🛒 Qtd. sugerida de reposição: 2,000 kg
-
-➡️ Item incluído na Lista de Reabastecimento.
-```
-
-### Schema SQLite
+### Schema
 ```sql
 CREATE TABLE lista_reabastecimento (
-  pro_cod        INTEGER PRIMARY KEY,
-  pro_des        TEXT NOT NULL,
-  grupo          TEXT,
-  estoque_min_kg REAL NOT NULL,
-  qtd_reposicao  REAL DEFAULT 0,
-  estado         TEXT DEFAULT 'ok',   -- 'ok' | 'alerta_enviado'
-  alerta_em      DATETIME,
-  reposto_em     DATETIME,
-  ultima_verif   DATETIME
+  pro_cod           INTEGER PRIMARY KEY,
+  pro_des           TEXT NOT NULL,
+  grupo             TEXT,
+  unidade           TEXT,
+  unidade_venda     TEXT,
+  estoque_min_kg    REAL NOT NULL,
+  estoque_atual_kg  REAL,
+  qtd_reposicao     REAL DEFAULT 0,
+  estado            TEXT DEFAULT 'ok',  -- 'ok' | 'alerta_enviado'
+  alerta_em         DATETIME,
+  reposto_em        DATETIME,
+  ultima_verif      DATETIME,
+  notificado_em     DATETIME
 );
 ```
 
+### Endpoints
+- `GET /reabastecimento` — lista atual
+- `POST /reabastecimento/run` — força ciclo (debug)
+- `GET /reabastecimento/status` — última execução e próxima agendada
+
 ---
 
-## Aba 3 — Pedidos de Clientes
+## Aba 3 — Remessas
 
-### Objetivo
-Permitir que funcionários registrem pedidos de produtos solicitados por clientes que não estão disponíveis no momento ou que precisam ser encomendados. Exemplo: cliente solicita "Ipê Roxo" → funcionário adiciona o pedido na aba 3.
+**Status:** implementado (incluindo Round 2 de robustez em 2026-05-17).
 
-### Casos de uso
-- Produto fora de estoque e cliente deseja quando chegar
-- Produto não cadastrado no sistema (novo item a considerar)
-- Cliente quer quantidade específica separada quando disponível
+### Conceito
+Quando chega mercadoria com **custo diferente**, registra-se um snapshot do
+"estoque antigo" (qtd / custo / preço / markup). O sistema acompanha o consumo
+via vendas no PDV e dispara alerta quando estiver na hora de revisar o preço.
 
-### Funcionalidades da Interface
-- **Formulário de novo pedido:** campo de texto para nome do produto/item, campo para nome do cliente (opcional), campo para observação (opcional), botão "Adicionar Pedido"
-- **Lista de pedidos abertos:** exibe todos os pedidos pendentes com data de registro
-- **Ações por pedido:** marcar como "Atendido" (remove da lista ativa) ou "Cancelado"
-- **Busca:** filtrar pedidos por nome do produto ou cliente
-- Sem integração com Firebird — 100% gerenciado em SQLite local da aplicação
+### Fluxo
+1. Usuário cria remessa informando produto + novo custo.
+2. Sistema captura snapshot do estoque atual e da pauta atual; calcula preço sugerido
+   (markup constante, arredondado pra próximo par+,01).
+3. Scheduler verifica a cada `REMESSA_CHECK_MINUTES` (default 5):
+   - **Auto-conclusão:** se o preço no Firebird mudar (comparação por centavos),
+     a remessa fecha automaticamente.
+   - **Alerta:** se consumo do estoque antigo ≥ `1 − STOCK_PRECO_ALERT_PCT`
+     (default 80%), marca `alerta_preco` e dispara Telegram (cooldown 24 h).
+   - **Auto-revert:** se consumo cair **5pp abaixo** do limiar (histerese), volta
+     `alerta_preco → ativa`. Cobre devoluções / entradas que reduzem o consumo
+     calculado.
+4. Usuário pode concluir manualmente (lê preço atual do Firebird), cancelar
+   (preserva no histórico) ou apagar registros do histórico.
 
-### Regras de Negócio
-- Pedidos não têm vínculo obrigatório com `PRO_COD` — o produto pode ser um item não cadastrado
-- Campo de produto é texto livre (o funcionário digita o nome como o cliente pediu)
-- Se o produto existir no banco, pode exibir sugestão de autocomplete buscando em `PRODUTO.PRO_DES`
-- Pedidos não expiram automaticamente — devem ser encerrados manualmente pelo funcionário
-- Sem envio de Telegram para esta aba (somente operação interna)
-
-### Schema SQLite
+### Schema
 ```sql
-CREATE TABLE pedidos_clientes (
-  id           INTEGER PRIMARY KEY AUTOINCREMENT,
-  produto_nome TEXT NOT NULL,          -- texto livre (como o cliente pediu)
-  pro_cod      INTEGER,                -- FK opcional para PRODUTO.PRO_COD
-  cliente_nome TEXT,                   -- nome do cliente (opcional)
-  observacao   TEXT,
-  status       TEXT DEFAULT 'aberto',  -- 'aberto' | 'atendido' | 'cancelado'
-  criado_em    DATETIME NOT NULL,
-  encerrado_em DATETIME,
-  criado_por   TEXT                    -- nome do funcionário (opcional)
+CREATE TABLE remessas (
+  id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+  pro_cod               INTEGER NOT NULL,
+  pro_des               TEXT NOT NULL,
+  unidade               TEXT NOT NULL,
+  estoque_antigo        REAL NOT NULL,
+  custo_antigo          REAL NOT NULL,
+  preco_antigo          REAL NOT NULL,
+  markup_pct            REAL NOT NULL,
+  custo_novo            REAL NOT NULL,
+  preco_sugerido        REAL NOT NULL,
+  alerta_threshold_pct  REAL NOT NULL DEFAULT 0.20,
+  estado                TEXT NOT NULL DEFAULT 'ativa',
+  iniciada_em           DATETIME NOT NULL,
+  alertada_em           DATETIME,
+  notificada_em         DATETIME,
+  concluida_em          DATETIME,
+  cancelada_em          DATETIME,
+  motivo_cancelamento   TEXT,
+  preco_final           REAL,
+  vendas_baseline       REAL NOT NULL DEFAULT 0
+);
+CREATE UNIQUE INDEX uq_remessa_ativa_por_produto
+  ON remessas (pro_cod) WHERE estado IN ('ativa', 'alerta_preco');
+```
+
+Estados: `ativa` → `alerta_preco` (e volta com histerese) → `concluida` /
+`cancelada`. O UNIQUE INDEX parcial garante no máximo uma remessa ativa por
+produto.
+
+### Endpoints
+- `GET /remessas/produtos?q=...` — busca de produtos monitoráveis
+- `GET /remessas/produtos/{pro_cod}/snapshot` — snapshot ao vivo (inclui
+  `tem_pauta` e `tem_remessa_ativa`)
+- `POST /remessas/preview-preco` — preview do preço sugerido
+- `GET /remessas` — lista (com `vendido` e `consumo_pct` ao vivo)
+- `POST /remessas` — cria; 422 se produto fora da pauta padrão; 409 se já tem
+  ativa (tratado via `IntegrityError` do UNIQUE INDEX — resolve corrida entre
+  requests simultâneas)
+- `POST /remessas/{id}/cancelar`
+- `POST /remessas/{id}/concluir-manual`
+- `POST /remessas/run` — força ciclo (debug)
+- `DELETE /remessas/historico` — limpa concluídas + canceladas
+- `DELETE /remessas/{id}` — apaga registro individual em estado terminal
+
+### Round 2 (2026-05-17)
+- Tratamento de corrida no `POST /remessas` via `IntegrityError` do UNIQUE INDEX.
+- Bloqueio de produto fora de `PTA=1` (422) com mensagem clara.
+- Comparação de preço por centavos (`round(x,2) != round(y,2)`) em vez de
+  epsilon — elimina ruído de ponto flutuante.
+- `DELETE /remessas/{id}` individual + ícone Trash2 nos cards de histórico.
+- (Round anterior) Histerese de 5pp para `alerta_preco → ativa` e substituição
+  de `window.prompt/confirm/alert` por modais (`ConfirmDialog`) e toasts.
+
+---
+
+## Aba 4 — Pedidos de Clientes
+
+**Status:** implementado.
+
+### Funcionalidades
+- Formulário com texto livre do produto (com autocomplete via `PRODUTO.PRO_DES`).
+- Cada pedido aceita **múltiplos clientes** (nome + telefone). A busca de
+  cliente bate no cadastro do Nutify e autopreenche o telefone.
+- Ações: marcar como atendido / cancelado / reabrir / remover.
+
+### Schema
+```sql
+CREATE TABLE pedido (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  produto_nome  TEXT NOT NULL,        -- texto livre
+  pro_cod       INTEGER,              -- FK opcional para PRODUTO.PRO_COD
+  unidade       TEXT,
+  observacao    TEXT,
+  status        TEXT NOT NULL DEFAULT 'aberto',  -- 'aberto'|'atendido'|'cancelado'
+  criado_em     DATETIME NOT NULL,
+  atualizado_em DATETIME NOT NULL,
+  encerrado_em  DATETIME
+);
+
+CREATE TABLE pedido_cliente (
+  id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+  pedido_id          INTEGER NOT NULL,
+  nome               TEXT NOT NULL,
+  telefone           TEXT,
+  cliente_externo_id INTEGER,         -- referência ao Nutify (snapshot)
+  criado_em          DATETIME NOT NULL,
+  FOREIGN KEY (pedido_id) REFERENCES pedido(id) ON DELETE CASCADE
 );
 ```
 
+### Endpoints
+- `GET /pedidos` / `POST /pedidos` / `PATCH /pedidos/{id}` / `DELETE /pedidos/{id}`
+- `POST /pedidos/{id}/clientes` / `DELETE /pedidos/{id}/clientes/{cliente_id}`
+- `GET /clientes/buscar?q=...` — autocomplete via Firebird
+
 ---
 
-## Identidade Visual — Casa Granum
+## Aba 5 — Rank
 
-> Informações extraídas do **Manual da Marca (05/03/26)** e análise pixel-a-pixel dos arquivos de logo oficiais (`CasaGranum (2).png` e `CasaGranumSF (3).png`).
+**Status:** implementado.
 
-### Logotipo
+### Funcionalidades
+- Top produtos por **quantidade vendida**, **valor total** ou **nº de vendas**.
+- Filtros: período (data início/fim), grupo, paginação `+50` (limite até 100k —
+  fix aplicado em 2026-05-17, antes quebrava no terceiro "Ver mais").
+- Variação vs. período anterior (mesma janela deslizada para trás).
+- Gráfico de série temporal por produto.
+- Export CSV.
 
-O logo é composto por um **ícone de casa com espiga de grão integrada** ao lado esquerdo, e o nome **"CASA GRANUM"** em duas linhas com uma linha horizontal de base. Existe em duas versões:
+### Endpoints
+- `GET /rank` — lista paginada
+- `GET /rank/grupos` — opções do filtro
+- `GET /rank/csv` — export
+- `GET /rank/{pro_cod}/serie` — série temporal para gráfico
 
-| Versão | Arquivo | Uso |
+100% leitura direta no Firebird (sem cache local — é consulta ad-hoc).
+
+---
+
+## Identidade Visual
+
+| Token | HEX | Uso |
 |---|---|---|
-| **Escura** (fundo verde-floresta) | `CasaGranum (2).png` | Fundos escuros, materiais premium |
-| **Clara** (fundo branco) | `CasaGranumSF (3).png` | Fundos claros, interfaces digitais, impressão |
+| `forest` / `forestdeep` | `#16201A` / `#0D1411` | Cor primária — fundo escuro, headers |
+| `copper` / `copperdark` / `copperglow` | `#A96132` / `#8B4E28` / `#C77845` | CTAs, destaques, badges |
+| `cream` / `creamdeep` | `#F5F0EA` / `#EBE3D8` | Fundos claros, cards |
+| `ink` / `inkdim` / `inkmuted` | `#1C2120` / `#3D3935` / `#5C5853` | Texto |
+| `wheat` / `wheatlight` | `#D4C4A8` / `#E5D8C0` | Bordas e linhas sutis |
+| `danger` / `dangersoft` | `#B7261A` / `#FBEAE7` | Erro / destrutivo |
+| `warn` / `warnsoft` | `#9C6B0F` / `#FBF1DC` | Aviso |
+| `good` / `goodsoft` | `#3F6A3A` / `#EAF2E8` | Sucesso |
 
-### Paleta de Cores
+Tokens definidos em [`frontend/tailwind.config.ts`](frontend/tailwind.config.ts).
 
-Cores extraídas por amostragem direta de pixels dos arquivos oficiais:
+**Tipografia:** uma única fonte sans-serif via `--font-sans`, usada nas três
+slots (`sans` / `display` / `body`).
 
-| Nome | HEX | RGB | Uso |
-|---|---|---|---|
-| **Verde Floresta** | `#16201A` | rgb(22, 32, 26) | Cor primária — fundo escuro, textos sobre fundo claro |
-| **Cobre / Terracota** | `#A96132` | rgb(169, 97, 50) | Cor de destaque — "GRANUM", telhado do ícone, CTAs, destaques |
-| **Branco** | `#FFFFFF` | rgb(255, 255, 255) | Fundos claros, textos sobre verde escuro |
-| **Preto Suave** | `#1C2120` | rgb(28, 33, 32) | Textos de corpo, variação escura próxima ao verde |
+**Ícones:** Lucide (`lucide-react`) — estilo linha simples, orgânico.
 
-**Gradiente de apoio (observado no manual):** o manual usa gradiente radial suave sobre fundo escuro — verde floresta com leve variação para verde ainda mais escuro no centro.
-
-#### Uso das cores no frontend
-
-```css
-:root {
-  --color-primary:    #16201A;   /* verde floresta — background escuro, nav */
-  --color-accent:     #A96132;   /* cobre — botões, destaques, badges */
-  --color-white:      #FFFFFF;   /* branco — texto sobre escuro, cards */
-  --color-text-dark:  #1C2120;   /* texto de corpo sobre fundo claro */
-  --color-surface:    #F5F0EA;   /* creme suave — fundo de cards/seções claras */
-  --color-border:     #D4C4A8;   /* linha/borda sutil em tons quentes */
-}
-```
-
-### Tipografia
-
-Fontes identificadas no arquivo PDF do manual da marca:
-
-| Fonte | Classificação | Uso no Manual | Equivalente Web (Google Fonts) |
-|---|---|---|---|
-| **Elizabeth** | Serif clássica elegante | Logo, títulos principais | **Playfair Display** ou **Libre Baskerville** |
-| **Swiss 721 BT Condensed** | Sans-serif condensada | Corpo de texto, legendas | **Barlow Condensed** ou **Work Sans** |
-| **Swiss 721 BT Bold Condensed** | Sans-serif condensada negrito | Subtítulos, ênfase | **Barlow Condensed 700** |
-
-**Recomendação de implementação web:**
-```html
-<!-- Google Fonts -->
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Barlow+Condensed:wght@400;600;700&display=swap" rel="stylesheet">
-```
-
-```css
-/* Tipografia */
-font-family-heading: 'Playfair Display', Georgia, serif;    /* títulos, logo text */
-font-family-body:    'Barlow Condensed', sans-serif;        /* corpo, labels, UI */
-```
-
-### Personalidade e Tom da Marca
-
-Com base no visual do manual e da identidade da loja:
-
-- **Natural e artesanal** — produtos a granel, saudáveis, sem processamento
-- **Premium acessível** — qualidade com proximidade e calor humano
-- **Clássico e confiável** — tipografia serif, cores terrosas, estética atemporal
-- **Próximo da natureza** — verde floresta, cobre/âmbar, tons de terra e grão
-
-### Diretrizes de Aplicação no Frontend
-
-#### Layout geral
-- **Fundo da aplicação (modo claro):** branco `#FFFFFF` ou creme `#F5F0EA`
-- **Navbar/Header:** verde floresta `#16201A` com logo na versão clara (`CasaGranumSF`)
-- **Fundo da aplicação (modo escuro opcional):** `#16201A` com logo escuro (`CasaGranum`)
-- **Cards de produto:** fundo branco ou creme, borda sutil `#D4C4A8`, sombra leve
-- **Botão primário (CTA):** fundo `#A96132` (cobre), texto branco, hover com variação mais escura `#8B4E28`
-- **Abas ativas:** indicador em cobre `#A96132`, texto em verde floresta
-
-#### Ícones e elementos visuais
-- Usar ícones de linha simples (Lucide ou Phosphor Icons) — estilo orgânico e limpo
-- Evitar elementos muito tecnológicos ou frios (sem azuis corporativos, sem gradientes neon)
-- Preferir cantos levemente arredondados (`border-radius: 6-8px`) — warm, não duro
-
-#### Estados de alerta (Aba 2 — Reabastecimento)
-- 🔴 Crítico: badge vermelho escuro `#C0392B`
-- 🟡 Alerta: badge âmbar `#D4A017` (complementa a paleta terrosa)
-- ✅ OK: badge verde `#2E7D32`
-
-#### Aba 1 — Consultar por Objetivo
-- Campo de busca centralizado, amplo, com placeholder acolhedor: *"Qual é o seu objetivo hoje?"*
-- Botões de atalho (tags): `"Emagrecer"`, `"Energia"`, `"Ansiedade"`, `"Imunidade"`, `"Sono"` — fundo creme com borda cobre
-- Cards de resultado: foto/ícone do produto, nome em Playfair Display, resumo do benefício, preço por 100g, badge de disponibilidade
-
-#### Aba 3 — Pedidos de Clientes
-- Interface limpa e operacional — foco em eficiência para o funcionário
-- Formulário com campos claros, botão de ação em cobre
-- Lista de pedidos abertos com data, produto, cliente e status
-
-### Assets Disponíveis
-
-```
-/home/alexzera/homelab/Logo-Casa Granum/
-├── CasaGranum (2).png       # Logo versão escura (2363×2363px) — fundo verde floresta
-└── CasaGranumSF (3).png     # Logo versão clara (2363×2363px) — fundo transparente/branco
-```
-
-> Para uso no frontend, converter os logos para `.svg` ou usar os `.png` com compressão adequada (`webp`). A versão clara (`SF`) é a recomendada para uso em interfaces digitais sobre fundo branco.
-
----
-
-## Decisão de Tecnologia e Deploy
-
-### Análise do Ambiente
-| Fator | Situação |
-|---|---|
-| OS de produção | Windows (Nutify PDV roda em Windows) |
-| WSL2 | Disponível e funcional na mesma máquina |
-| Firebird WireCrypt | Requer cliente nativo — já validado via WSL2 + `libfbclient.so` |
-| Acesso Firebird | Somente leitura — escrita apenas via SQLite local |
-
-### Stack
-
-#### Backend: Python 3.12 + FastAPI
-| Pacote | Uso |
-|---|---|
-| `python-firebird-driver` | Conexão Firebird 3.0 com WireCrypt via `libfbclient.so` |
-| `anthropic` | Claude API com prompt caching |
-| `python-telegram-bot` v21+ | Alertas Telegram assíncronos |
-| `APScheduler` | Loop periódico do monitor de estoque |
-| `aiosqlite` | Persistência local (cache IA, lista reabastecimento, pedidos clientes) |
-| `fastapi` + `uvicorn` | API REST |
-| `pydantic-settings` | Leitura de variáveis de ambiente tipadas |
-
-#### Frontend: Next.js 14 + Tailwind CSS
-| Pacote | Uso |
-|---|---|
-| `shadcn/ui` | Componentes acessíveis e modernos |
-| `Framer Motion` | Animações suaves |
-| `SWR` ou `TanStack Query` | Polling automático e cache de requisições |
-| Identidade visual Casa Granum | Cores, tipografia e assets a fornecer |
-
-#### Deploy: Docker Compose no WSL2 ✅
-- Solução recomendada: isolamento de dependências, fácil atualização, sem instalações adicionais no Windows
-- Containers reiniciam automaticamente via `restart: unless-stopped`
-- Configurar WSL2 para iniciar Docker no boot do Windows (`/etc/wsl.conf` + `systemd`)
-
-```yaml
-# docker-compose.yml
-services:
-  backend:
-    build: ./backend
-    volumes:
-      - ./data:/app/data    # SQLite persistente
-    env_file: .env
-    ports:
-      - "8000:8000"
-    restart: unless-stopped
-
-  frontend:
-    build: ./frontend
-    env_file: .env
-    ports:
-      - "3000:3000"
-    depends_on:
-      - backend
-    restart: unless-stopped
-```
+**Logos:** `CasaGranumSF.png` (versão clara) em uso no header; arquivos
+referenciados na raiz do repo.
 
 ---
 
 ## Estrutura de Pastas
 
 ```
-casa-granum-system/
+casagranum/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py
 │   │   ├── config.py
 │   │   ├── db/
-│   │   │   ├── firebird.py           # Conexão, pool, encoding BLOB ISO8859-1→UTF-8
-│   │   │   └── sqlite.py             # Setup tabelas e helpers
+│   │   │   ├── firebird.py
+│   │   │   └── sqlite.py
 │   │   ├── modules/
-│   │   │   ├── monitor/
-│   │   │   │   ├── scheduler.py      # APScheduler
-│   │   │   │   ├── checker.py        # Lógica estoque mínimo
-│   │   │   │   └── telegram.py       # Envio de alerta
-│   │   │   └── recommendations/
-│   │   │       ├── catalog.py        # Carrega PRO_BCO, decodifica BLOBs
-│   │   │       ├── ai.py             # Claude API + prompt caching
-│   │   │       └── cache.py          # Hash objetivo + catálogo, TTL, invalidação
+│   │   │   ├── backup.py
+│   │   │   ├── monitor/         # Aba 2 (scheduler, checker, telegram)
+│   │   │   ├── rank/            # Aba 5 (repository)
+│   │   │   ├── recommendations/ # Aba 1 (catalog, ai, cache, llm/*)
+│   │   │   └── remessas/        # Aba 3 (checker, nutify, pricing, repository)
 │   │   └── routers/
-│   │       ├── recomendacoes.py      # POST /recomendacoes
-│   │       ├── reabastecimento.py    # GET /reabastecimento
-│   │       └── pedidos.py            # CRUD /pedidos
+│   │       ├── clientes.py
+│   │       ├── pedidos.py
+│   │       ├── rank.py
+│   │       ├── reabastecimento.py
+│   │       ├── recomendacoes.py
+│   │       └── remessas.py
 │   ├── Dockerfile
 │   └── requirements.txt
 ├── frontend/
 │   ├── app/
-│   │   ├── page.tsx                  # Aba 1: Consultar por Objetivo
-│   │   ├── reabastecimento/
-│   │   │   └── page.tsx              # Aba 2: Lista de Reabastecimento
-│   │   └── pedidos/
-│   │       └── page.tsx              # Aba 3: Pedidos de Clientes
+│   │   ├── page.tsx              # Aba 1
+│   │   ├── reabastecimento/      # Aba 2
+│   │   ├── remessas/             # Aba 3
+│   │   ├── pedidos/              # Aba 4
+│   │   ├── rank/                 # Aba 5
+│   │   └── api/[...path]/        # Route Handler — proxy pra backend
 │   ├── components/
-│   │   ├── ObjectiveSearch.tsx
-│   │   ├── ProductCard.tsx
-│   │   ├── RestockTable.tsx          # Exibe PRO_QTD atual + mínimo + status
-│   │   └── OrderForm.tsx             # Formulário de pedido manual
+│   │   ├── ConfirmDialog.tsx     # Modal genérico (variant danger, input opcional)
+│   │   ├── Toast.tsx             # Auto-dismiss
+│   │   ├── RemessaCard.tsx
+│   │   ├── NovaRemessaModal.tsx
+│   │   ├── PedidoList.tsx
+│   │   └── ...
+│   ├── lib/
+│   ├── tailwind.config.ts
 │   ├── Dockerfile
 │   └── package.json
-├── data/                             # Volume persistente SQLite
-├── docker-compose.yml
-├── .env
-└── .env.example
+├── android/                      # WebView wrapper (Kotlin + Compose)
+├── .github/workflows/
+│   ├── docker-publish.yml        # GHCR no push de main + tags v*
+│   └── android-release.yml       # APK release em tags android-v*
+├── docker-compose.yml            # Dev (build local)
+├── docker-compose.prod.yml       # Produção (pull do GHCR)
+├── .env.example
+└── README.md
 ```
 
 ---
 
-## Variáveis de Ambiente (`.env`)
+## Sincronização em Tempo Real
 
-Veja o arquivo [`.env.example`](./.env.example) na raiz do projeto. Copie para `.env`
-e preencha com os valores reais do seu ambiente. **Nunca commite `.env`.**
-
-> Nota: o stack atual usa **Gemini** (`google-genai`) em vez de Anthropic Claude.
-> A chave é `GEMINI_API_KEY` e o modelo padrão é `gemini-2.5-flash`.
-
----
-
-## Skills do Claude Code para Ativar no Desenvolvimento
-
-### Instrução de contexto (incluir no início de cada sessão)
-
-```
-# Contexto — Sistema Casa Granum
-
-Stack: Python 3.12 + FastAPI (backend), Next.js 14 + Tailwind + shadcn/ui (frontend).
-Deploy: Docker Compose no WSL2.
-
-Banco principal: Firebird 3.0 com WireCrypt (host/porta configurados via `.env`).
-Driver: python-firebird-driver com libfbclient.so nativo (suporte a WireCrypt).
-Charset Firebird: ISO8859_1 — converter SEMPRE para UTF-8 ao ler strings e BLOBs.
-Acesso: SOMENTE LEITURA. Nunca tentar INSERT/UPDATE/DELETE no Firebird.
-
-Campos-chave da tabela PRODUTO:
-  PRO_IDB = 'S'  → integração com balança (463 produtos ativos)
-  PRO_MIX = 'S'  → estoque mínimo configurado no Nutify PDV
-  PRO_MIA        → valor do estoque mínimo em KG (VARCHAR, ex: "1.500")
-  PRO_QTD        → estoque atual em KG (NUMERIC)
-  PRO_BCO        → benefícios do produto (BLOB TEXT, ISO8859-1)
-
-Banco local: SQLite via aiosqlite.
-Tabelas SQLite: lista_reabastecimento, recomendacao_cache, pedidos_clientes.
-
-IA: Claude Sonnet 4.6 via Anthropic SDK com prompt caching habilitado para o catálogo.
-O catálogo (~200-300 produtos com PRO_BCO) deve ser enviado como bloco cached no system prompt.
-
-Três abas principais:
-  1. Consultar por Objetivo — IA recomenda produtos por objetivo do usuário
-  2. Lista de Reabastecimento — produtos com estoque abaixo do mínimo (mostra PRO_QTD atual)
-  3. Pedidos de Clientes — registro manual de pedidos feitos por clientes para funcionários
-
-Nunca commitar .env. Sempre usar variáveis de ambiente via pydantic-settings.
-```
-
-### Skills recomendadas
-
-| Skill | Quando ativar |
-|---|---|
-| `frontend-design` | Implementação do frontend — identidade visual Casa Granum, qualidade visual das 3 abas |
-| `claude-api` | Implementação de `ai.py` — garantir uso correto de prompt caching, streaming e tratamento de erros da Anthropic SDK |
-| `security-review` | Antes de cada deploy — checar CORS, endpoints sem autenticação, credenciais expostas |
-| `simplify` | Após cada módulo — remover abstrações desnecessárias, código duplicado |
+| Aspecto | Frequência | Configurável via |
+|---|---|---|
+| Catálogo da IA | 60 s | `CATALOG_REFRESH_SECONDS` |
+| Monitor de reabastecimento | 5 min | `MONITOR_INTERVAL_MINUTES` |
+| Verificador de remessas | 5 min | `REMESSA_CHECK_MINUTES` |
+| Limpeza de itens desativados na lista | live (a cada GET) | — |
+| Polling UI (Remessas em alerta) | 5 s | hard-coded |
+| Polling UI (Remessas normal) | 30 s | hard-coded |
 
 ---
 
-## Fases de Desenvolvimento
+## Deploy
 
-### Fase 1 — Infraestrutura Base
-- [ ] Repositório Git com `.gitignore`, `.env.example`, `README.md`
-- [ ] `docker-compose.yml` base com backend e frontend
-- [ ] `firebird.py` — pool de conexões, tratamento WireCrypt, decodificação BLOB ISO8859-1→UTF-8
-- [ ] `sqlite.py` — criação das tabelas `lista_reabastecimento`, `recomendacao_cache`, `pedidos_clientes`
-- [ ] Teste de conexão e query no produto Gengibre em Pó (`PRO_COD = 4`)
+Ver [`README.md`](./README.md) para o passo-a-passo. Resumo:
 
-### Fase 2 — Monitor de Estoque + Aba 2
-- [ ] `checker.py` — lê `PRO_MIX='S'` + `PRO_IDB='S'` + `PRO_MIA`, compara com `PRO_QTD`
-- [ ] `telegram.py` — alerta único por produto com estoque atual + mínimo
-- [ ] `scheduler.py` — loop APScheduler com intervalo configurável
-- [ ] `routers/reabastecimento.py` — `GET /reabastecimento` com `PRO_QTD` atual
-- [ ] Frontend Aba 2 — tabela com polling 60s, exibindo estoque atual, mínimo e status 🔴/🟡
-
-### Fase 3 — Pedidos de Clientes + Aba 3
-- [ ] `routers/pedidos.py` — `GET /pedidos`, `POST /pedidos`, `PATCH /pedidos/{id}` (status)
-- [ ] Frontend Aba 3 — formulário de novo pedido, lista de pedidos abertos, ações de encerramento
-- [ ] Autocomplete opcional: busca em `PRODUTO.PRO_DES` ao digitar o nome do produto
-
-### Fase 4 — Motor de IA + Aba 1
-- [ ] `catalog.py` — carrega catálogo do Firebird, decodifica BLOBs, normaliza texto
-- [ ] `ai.py` — system prompt com catálogo como bloco cached + instrução de análise por objetivo
-- [ ] `cache.py` — hash objetivo + hash catálogo, persistência SQLite, invalidação por TTL e mudança
-- [ ] `routers/recomendacoes.py` — `POST /recomendacoes` com `{"objetivo": "emagrecer"}`
-- [ ] Frontend Aba 1 — busca por objetivo, botões de atalho, cards de produtos recomendados
-
-### Fase 5 — Identidade Visual e Polimento
-- [ ] Aplicar identidade visual Casa Granum (cores, tipografia — a fornecer)
-- [ ] Responsividade mobile
-- [ ] Animações e transições suaves entre abas
-- [ ] Testes visuais e funcionais nas 3 abas
-
-### Fase 6 — Deploy e Produção
-- [ ] Configurar `systemd` no WSL2 para iniciar Docker no boot do Windows
-- [ ] Logs estruturados com `structlog`
-- [ ] Health checks: `GET /health`
-- [ ] Documentação operacional: como configurar estoque mínimo no Nutify PDV, como registrar pedidos
+- **Dev:** `docker compose up -d --build`
+- **Produção:** `docker compose -f docker-compose.prod.yml pull && up -d` (puxa de
+  GHCR; preserva o volume `casagranum_data`)
+- **Tunnel:** `docker compose --profile tunnel up -d` com
+  `CLOUDFLARE_TUNNEL_TOKEN`
+- **Android:** push de tag `android-v*` dispara `android-release.yml`; APK
+  publicado nas releases do GitHub
 
 ---
 
-## Notas Técnicas Críticas
+## Próximos Passos
 
-### WireCrypt no Docker
-```dockerfile
-# Instalar cliente Firebird com suporte a WireCrypt
-RUN apt-get install -y firebird3.0-utils
-```
+Backlog priorizado de melhorias (não bloqueante para uso atual):
 
-### Leitura de BLOB no Python (PRO_BCO)
+### Remessas — P2
+- `#8` Badge "↓ sugere reduzir" quando custo cai (e arredondamento pra baixo+,01)
+- `#13` Threshold ajustável por remessa via UI (campo opcional no Nova remessa)
+- `#9` Cache curto (15-30 s) em `vendas_acumuladas` se notar lentidão
+
+### Remessas — P3
+- `#10` SSE em vez de polling
+- `#11` Alerta de consumo lento (overstock)
+- `#14` `GET /remessas/saude` (última execução do scheduler, próxima agendada, último erro)
+- `#15` Métrica de tempo médio entre criação e conclusão
+
+### Operacional
+- Logs estruturados (`structlog`)
+- Healthchecks granulares por dependência (Firebird, Telegram, LLM)
+- Documentação operacional do lojista (como configurar `PRO_EMN` no Nutify)
+
+---
+
+## Notas Técnicas
+
+### Decodificação BLOB Firebird
 ```python
 cursor.execute("SELECT PRO_COD, PRO_DES, PRO_BCO FROM PRODUTO WHERE ...")
 for row in cursor:
     blob = row[2]
-    texto = blob.read().decode('iso-8859-1') if blob else None
+    texto = blob.decode("iso-8859-1") if blob else None
 ```
 
-### Prompt Caching com Catálogo (Anthropic SDK)
-```python
-response = client.messages.create(
-    model="claude-sonnet-4-6",
-    system=[
-        {
-            "type": "text",
-            "text": catalogo_formatado,           # ~200-300 produtos
-            "cache_control": {"type": "ephemeral"} # mantido em cache pelo modelo
-        },
-        {
-            "type": "text",
-            "text": "Analise os produtos acima e recomende os mais adequados para o objetivo informado..."
-        }
-    ],
-    messages=[{"role": "user", "content": objetivo}]
-)
-```
+### Configurar Estoque Mínimo no Nutify
+1. Abrir cadastro do produto.
+2. Preencher o **estoque mínimo** (campo `PRO_EMN` — em KG / UN / CAPS conforme `PRO_UND`).
+3. Salvar. Na próxima verificação (até 5 min), o produto entra no monitoramento.
 
-### Configurar Estoque Mínimo no Nutify PDV
-Para que um produto seja monitorado pela aplicação:
-1. Abrir cadastro do produto no Nutify PDV
-2. Habilitar flag de estoque mínimo → `PRO_MIX = 'S'`
-3. Preencher o valor mínimo em KG → `PRO_MIA = "1.500"` (por exemplo)
-4. Salvar — na próxima verificação (até 5 minutos por padrão), o produto já entra no monitoramento; o catálogo da IA também é atualizado em até 60 s
+### Proxy `/api/*`
+Frontend faz proxy via Route Handler em `app/api/[...path]/route.ts` apontando
+para `BACKEND_INTERNAL_URL` (runtime). Não usar `next.config rewrites` em
+standalone — o destino é fixado em build time.

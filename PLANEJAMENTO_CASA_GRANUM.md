@@ -289,6 +289,18 @@ produto.
   recolhido. Conversão automática: input em % consumido, persistência em %
   restante.
 
+**2026-05-17 — Round 5 (observabilidade + SSE)**
+- `GET /remessas/saude`: estado do checker (em_execucao, ultima_execucao,
+  ultimo_sumario, ultimo_erro, próxima execução agendada), contagens por
+  estado, health Firebird (latência) e Telegram (configurado?).
+- `GET /remessas/metricas`: tempo médio/min/max entre `iniciada_em` e
+  `concluida_em` (via `julianday`), + top 10 produtos por nº de conclusões.
+- `GET /remessas/stream` (SSE): emite `tick` com sumário ao fim de cada
+  ciclo e `erro` em caso de exceção. Heartbeat 20 s pra atravessar proxies
+  (testado por Cloudflare Tunnel-like layout via Route Handler do Next).
+- Frontend escuta `tick` via `EventSource` em paralelo ao polling (que
+  segue como fallback).
+
 **Round anterior**
 - Histerese de 5pp para `alerta_preco → ativa` (evita oscilação na borda).
 - Substituição de `window.prompt/confirm/alert` por modais (`ConfirmDialog`) e
@@ -477,10 +489,7 @@ Backlog priorizado de melhorias (não bloqueante para uso atual):
 - `#9` Cache curto (15-30 s) em `vendas_acumuladas` se notar lentidão
 
 ### Remessas — P3
-- `#10` SSE em vez de polling
-- `#11` Alerta de consumo lento (overstock)
-- `#14` `GET /remessas/saude` (última execução do scheduler, próxima agendada, último erro)
-- `#15` Métrica de tempo médio entre criação e conclusão
+- ~~`#11` Alerta de consumo lento (overstock)~~ — fora do escopo do negócio
 
 ### Operacional
 - Logs estruturados (`structlog`)

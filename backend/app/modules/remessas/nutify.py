@@ -6,7 +6,9 @@ Read-only no Nutify PDV. Toda escrita acontece no SQLite local.
 from __future__ import annotations
 
 import logging
+import threading
 from datetime import datetime
+from time import monotonic
 from typing import Optional
 
 from app.db.firebird import firebird_connection
@@ -14,6 +16,12 @@ from app.db.firebird import firebird_connection
 logger = logging.getLogger(__name__)
 
 PTA_PADRAO = 1  # Pauta única ativa: "PAUTA PADRÃO (PREÇO LOJA)".
+
+# Cache de `vendas_acumuladas` por produto. Janela curta: dados frescos pro
+# UI sem martelar o Firebird em polling de 5s × N remessas ativas.
+_VENDAS_CACHE_TTL_S = 15.0
+_vendas_cache: dict[int, tuple[float, float]] = {}  # pro_cod -> (timestamp, valor)
+_vendas_lock = threading.Lock()
 
 
 def _normalizar(s: str) -> str:
@@ -123,6 +131,23 @@ def vendas_acumuladas(pro_cod: int) -> float:
         )
         row = cur.fetchone()
         return float(row[0] or 0)
+
+
+def vendas_acumuladas_cached(pro_cod: int) -> float:
+    """`vendas_acumuladas` com TTL curto. Usar nos hot paths (UI + checker).
+
+    Baseline de remessa nova (`criar`) deve usar a versão sem cache pra capturar
+    o valor exato no momento.
+    """
+    agora = monotonic()
+    with _vendas_lock:
+        cached = _vendas_cache.get(pro_cod)
+        if cached and (agora - cached[0]) < _VENDAS_CACHE_TTL_S:
+            return cached[1]
+    valor = vendas_acumuladas(pro_cod)
+    with _vendas_lock:
+        _vendas_cache[pro_cod] = (agora, valor)
+    return valor
 
 
 def saidas_desde(pro_cod: int, desde: datetime) -> float:

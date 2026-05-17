@@ -59,7 +59,7 @@ async def executar_verificacao() -> dict:
         estoque_antigo = float(r["estoque_antigo"])
         if estoque_antigo <= 0:
             continue
-        acumulado = nutify.vendas_acumuladas(r["pro_cod"])
+        acumulado = nutify.vendas_acumuladas_cached(r["pro_cod"])
         vendido = max(0.0, acumulado - float(r["vendas_baseline"]))
         consumo_pct = min(vendido / estoque_antigo, 1.0)
         threshold = float(r["alerta_threshold_pct"])

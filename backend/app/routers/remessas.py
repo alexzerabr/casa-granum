@@ -101,7 +101,7 @@ async def _enriquecer(r: dict) -> dict:
     """
     estoque_antigo = float(r["estoque_antigo"]) or 0.0
     if r["estado"] in ("ativa", "alerta_preco") and estoque_antigo > 0:
-        acumulado = await asyncio.to_thread(nutify.vendas_acumuladas, r["pro_cod"])
+        acumulado = await asyncio.to_thread(nutify.vendas_acumuladas_cached, r["pro_cod"])
         vendido = max(0.0, acumulado - float(r["vendas_baseline"]))
         consumo = min(vendido / estoque_antigo, 1.0)
     else:

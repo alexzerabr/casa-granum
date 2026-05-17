@@ -2,17 +2,22 @@
 
 import { Check, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { NovaRemessaModal } from "@/components/NovaRemessaModal";
 import { RemessaCard } from "@/components/RemessaCard";
+import { Toast } from "@/components/Toast";
 import {
   cancelarRemessa,
   concluirManual,
   limparHistorico,
   listarRemessas,
+  removerRemessa,
   type Remessa,
 } from "@/lib/remessas";
+
+type ToastState = { msg: string; variant: "success" | "error" } | null;
 
 type Aba = "ativas" | "historico";
 
@@ -26,6 +31,16 @@ export default function RemessasPage() {
   const [modalAberto, setModalAberto] = useState(false);
   const [confirmandoLimpar, setConfirmandoLimpar] = useState(false);
   const [limpando, setLimpando] = useState(false);
+  const [cancelando, setCancelando] = useState<Remessa | null>(null);
+  const [concluindo, setConcluindo] = useState<Remessa | null>(null);
+  const [apagando, setApagando] = useState<Remessa | null>(null);
+  const [toast, setToast] = useState<ToastState>(null);
+
+  const erroToast = (e: unknown, prefixo: string) =>
+    setToast({
+      msg: `${prefixo}: ${e instanceof Error ? e.message : "erro desconhecido"}`,
+      variant: "error",
+    });
 
   const recarregar = useCallback(async () => {
     try {
@@ -62,34 +77,70 @@ export default function RemessasPage() {
 
   const visiveis = aba === "ativas" ? ativas : historico;
 
-  const handleCancelar = async (id: number) => {
-    const motivo = window.prompt("Motivo do cancelamento (opcional):") ?? undefined;
+  const abrirCancelar = (id: number) => {
+    const r = remessas.find((x) => x.id === id);
+    if (r) setCancelando(r);
+  };
+
+  const abrirConcluir = (id: number) => {
+    const r = remessas.find((x) => x.id === id);
+    if (r) setConcluindo(r);
+  };
+
+  const abrirApagar = (id: number) => {
+    const r = remessas.find((x) => x.id === id);
+    if (r) setApagando(r);
+  };
+
+  const confirmarCancelar = async (motivo?: string) => {
+    if (!cancelando) return;
     try {
-      await cancelarRemessa(id, motivo || undefined);
+      await cancelarRemessa(cancelando.id, motivo || undefined);
+      setCancelando(null);
       await recarregar();
+      setToast({ msg: "Remessa cancelada.", variant: "success" });
     } catch (err) {
-      alert(`Falha ao cancelar: ${err instanceof Error ? err.message : "erro"}`);
+      erroToast(err, "Falha ao cancelar");
     }
   };
 
-  const handleConcluir = async (id: number) => {
-    if (!confirm("Confirma que o preço foi atualizado no Nutify?")) return;
+  const confirmarConcluir = async () => {
+    if (!concluindo) return;
     try {
-      await concluirManual(id);
+      await concluirManual(concluindo.id);
+      setConcluindo(null);
       await recarregar();
+      setToast({ msg: "Remessa concluída.", variant: "success" });
     } catch (err) {
-      alert(`Falha ao concluir: ${err instanceof Error ? err.message : "erro"}`);
+      erroToast(err, "Falha ao concluir");
+    }
+  };
+
+  const confirmarApagar = async () => {
+    if (!apagando) return;
+    try {
+      await removerRemessa(apagando.id);
+      setApagando(null);
+      await recarregar();
+      setToast({ msg: "Registro removido.", variant: "success" });
+    } catch (err) {
+      erroToast(err, "Falha ao remover");
     }
   };
 
   const handleLimparHistorico = async () => {
     setLimpando(true);
+    const qtd = historico.length;
     try {
-      await limparHistorico();
+      const r = await limparHistorico();
       setConfirmandoLimpar(false);
       await recarregar();
+      setToast({
+        msg: `${r.removidas || qtd} ${(r.removidas || qtd) === 1 ? "registro removido" : "registros removidos"}.`,
+        variant: "success",
+      });
     } catch (err) {
-      alert(`Falha ao limpar: ${err instanceof Error ? err.message : "erro"}`);
+      erroToast(err, "Falha ao limpar");
     } finally {
       setLimpando(false);
     }
@@ -207,8 +258,9 @@ export default function RemessasPage() {
                 <RemessaCard
                   key={r.id}
                   remessa={r}
-                  onCancelar={handleCancelar}
-                  onConcluir={handleConcluir}
+                  onCancelar={abrirCancelar}
+                  onConcluir={abrirConcluir}
+                  onApagar={abrirApagar}
                 />
               ))}
             </ul>
@@ -224,7 +276,55 @@ export default function RemessasPage() {
           onCriado={async () => {
             setModalAberto(false);
             await recarregar();
+            setToast({ msg: "Remessa iniciada.", variant: "success" });
           }}
+        />
+      )}
+
+      {cancelando && (
+        <ConfirmDialog
+          title="Cancelar remessa"
+          message={`Cancelar o controle de "${cancelando.pro_des}"? O histórico é preservado.`}
+          confirmLabel="Cancelar remessa"
+          cancelLabel="Voltar"
+          variant="danger"
+          input={{
+            label: "Motivo (opcional)",
+            placeholder: "Ex: produto trocado, custo conferido errado…",
+            maxLength: 200,
+          }}
+          onConfirm={confirmarCancelar}
+          onClose={() => setCancelando(null)}
+        />
+      )}
+
+      {concluindo && (
+        <ConfirmDialog
+          title="Marcar preço atualizado"
+          message={`Confirma que o preço de "${concluindo.pro_des}" já foi atualizado no Nutify? O sistema vai ler o preço atual do Firebird e fechar a remessa.`}
+          confirmLabel="Sim, atualizei"
+          onConfirm={confirmarConcluir}
+          onClose={() => setConcluindo(null)}
+        />
+      )}
+
+      {apagando && (
+        <ConfirmDialog
+          title="Apagar registro"
+          message={`Remover definitivamente "${apagando.pro_des}" do histórico? Esta ação não pode ser desfeita.`}
+          confirmLabel="Apagar"
+          cancelLabel="Voltar"
+          variant="danger"
+          onConfirm={confirmarApagar}
+          onClose={() => setApagando(null)}
+        />
+      )}
+
+      {toast && (
+        <Toast
+          message={toast.msg}
+          variant={toast.variant}
+          onDismiss={() => setToast(null)}
         />
       )}
     </div>

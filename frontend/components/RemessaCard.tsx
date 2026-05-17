@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { useState } from "react";
 import {
   formatarQuantidade,
@@ -12,6 +12,7 @@ interface Props {
   remessa: Remessa;
   onCancelar: (id: number) => void;
   onConcluir: (id: number) => void;
+  onApagar?: (id: number) => void;
 }
 
 function corBarra(consumoPct: number, thresholdPct: number, estado: string): string {
@@ -47,7 +48,7 @@ function rotuloEstado(estado: Remessa["estado"]): { label: string; klass: string
   }
 }
 
-export function RemessaCard({ remessa, onCancelar, onConcluir }: Props) {
+export function RemessaCard({ remessa, onCancelar, onConcluir, onApagar }: Props) {
   const [aberto, setAberto] = useState(false);
 
   const ativa = remessa.estado === "ativa" || remessa.estado === "alerta_preco";
@@ -79,14 +80,27 @@ export function RemessaCard({ remessa, onCancelar, onConcluir }: Props) {
             <span className="text-inkmuted">desde {formatarData(remessa.iniciada_em)}</span>
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setAberto((s) => !s)}
-          className="rounded-md border border-wheat px-2 py-1 text-xs font-medium text-inkdim hover:border-copper hover:text-copper"
-          aria-label={aberto ? "Fechar detalhes" : "Abrir detalhes"}
-        >
-          {aberto ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-        </button>
+        <div className="flex items-center gap-1.5">
+          {!ativa && onApagar && (
+            <button
+              type="button"
+              onClick={() => onApagar(remessa.id)}
+              className="rounded-md border border-wheat px-2 py-1 text-xs font-medium text-inkmuted hover:border-danger hover:text-danger"
+              aria-label="Apagar registro"
+              title="Apagar registro"
+            >
+              <Trash2 className="h-4 w-4" strokeWidth={2.25} />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setAberto((s) => !s)}
+            className="rounded-md border border-wheat px-2 py-1 text-xs font-medium text-inkdim hover:border-copper hover:text-copper"
+            aria-label={aberto ? "Fechar detalhes" : "Abrir detalhes"}
+          >
+            {aberto ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
+        </div>
       </div>
 
       {ativa && (

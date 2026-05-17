@@ -17,6 +17,7 @@ export interface Snapshot {
   custo_atual: number;
   preco_atual: number;
   markup_pct: number;
+  tem_pauta: boolean;
   tem_remessa_ativa: boolean;
 }
 
@@ -91,6 +92,10 @@ export function concluirManual(id: number): Promise<Remessa> {
 
 export function limparHistorico(): Promise<{ removidas: number }> {
   return apiFetch("/remessas/historico", { method: "DELETE" });
+}
+
+export function removerRemessa(id: number): Promise<{ removida: boolean }> {
+  return apiFetch(`/remessas/${id}`, { method: "DELETE" });
 }
 
 const SUFIXOS: Record<string, string> = {

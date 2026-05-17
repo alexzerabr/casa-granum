@@ -265,14 +265,27 @@ produto.
 - `DELETE /remessas/historico` — limpa concluídas + canceladas
 - `DELETE /remessas/{id}` — apaga registro individual em estado terminal
 
-### Round 2 (2026-05-17)
+### Histórico de melhorias
+
+**2026-05-17 — Round 2 (robustez)**
 - Tratamento de corrida no `POST /remessas` via `IntegrityError` do UNIQUE INDEX.
 - Bloqueio de produto fora de `PTA=1` (422) com mensagem clara.
 - Comparação de preço por centavos (`round(x,2) != round(y,2)`) em vez de
   epsilon — elimina ruído de ponto flutuante.
 - `DELETE /remessas/{id}` individual + ícone Trash2 nos cards de histórico.
-- (Round anterior) Histerese de 5pp para `alerta_preco → ativa` e substituição
-  de `window.prompt/confirm/alert` por modais (`ConfirmDialog`) e toasts.
+
+**2026-05-17 — Round 3 (custo descendo)**
+- `pricing.arredondar_par_01_baixo` (anterior par+,01 ≤ valor) e `sugerir_preco`
+  com direção opcional (param `custo_antigo`). Quando `novo_custo < custo_antigo`,
+  o preço sugerido é arredondado pra baixo — reflete a intenção real de reduzir
+  preço quando a mercadoria veio mais barata.
+- Badge "↓ sugere reduzir" no card e no modal de Nova remessa; preço sugerido
+  tinge em verde (`good`) em vez de cobre.
+
+**Round anterior**
+- Histerese de 5pp para `alerta_preco → ativa` (evita oscilação na borda).
+- Substituição de `window.prompt/confirm/alert` por modais (`ConfirmDialog`) e
+  toasts; botão "Limpar logs" no histórico.
 
 ---
 
@@ -454,7 +467,6 @@ Ver [`README.md`](./README.md) para o passo-a-passo. Resumo:
 Backlog priorizado de melhorias (não bloqueante para uso atual):
 
 ### Remessas — P2
-- `#8` Badge "↓ sugere reduzir" quando custo cai (e arredondamento pra baixo+,01)
 - `#13` Threshold ajustável por remessa via UI (campo opcional no Nova remessa)
 - `#9` Cache curto (15-30 s) em `vendas_acumuladas` se notar lentidão
 

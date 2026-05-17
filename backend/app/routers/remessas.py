@@ -221,6 +221,12 @@ async def run_manual() -> dict:
     return await health.executar(checker.executar_verificacao, origem="manual")
 
 
+@router.get("/metricas")
+async def metricas() -> dict:
+    """Tempo entre criação e conclusão. Útil pra calibrar threshold default."""
+    return await repository.tempos_conclusao()
+
+
 @router.get("/saude")
 async def saude() -> dict:
     """Snapshot pra observabilidade — scheduler, contagens, dependências externas."""

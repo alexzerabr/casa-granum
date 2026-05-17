@@ -157,3 +157,55 @@ async def contagem_por_estado() -> dict[str, int]:
     base = {e: 0 for e in estados}
     base.update({estado: total for estado, total in rows})
     return base
+
+
+async def tempos_conclusao() -> dict:
+    """Estatísticas de tempo entre `iniciada_em` e `concluida_em` (em horas).
+
+    Retorna agregado geral + top 10 produtos com mais conclusões.
+    Datas são ISO 8601 — `julianday` do SQLite faz a diferença em dias.
+    """
+    async with aiosqlite.connect(settings.sqlite_path) as db:
+        cur = await db.execute(
+            """
+            SELECT
+              COUNT(*)                                                       AS total,
+              AVG((julianday(concluida_em) - julianday(iniciada_em)) * 24.0) AS media_h,
+              MIN((julianday(concluida_em) - julianday(iniciada_em)) * 24.0) AS min_h,
+              MAX((julianday(concluida_em) - julianday(iniciada_em)) * 24.0) AS max_h
+            FROM remessas
+            WHERE estado='concluida' AND concluida_em IS NOT NULL
+            """
+        )
+        geral = await cur.fetchone()
+        total, media_h, min_h, max_h = geral
+        cur = await db.execute(
+            """
+            SELECT
+              pro_cod,
+              pro_des,
+              COUNT(*)                                                       AS total,
+              AVG((julianday(concluida_em) - julianday(iniciada_em)) * 24.0) AS media_h
+            FROM remessas
+            WHERE estado='concluida' AND concluida_em IS NOT NULL
+            GROUP BY pro_cod, pro_des
+            ORDER BY total DESC, media_h ASC
+            LIMIT 10
+            """
+        )
+        top = [
+            {
+                "pro_cod": pro_cod,
+                "pro_des": pro_des,
+                "total": total_p,
+                "media_h": round(media_h_p, 2) if media_h_p is not None else None,
+            }
+            for pro_cod, pro_des, total_p, media_h_p in await cur.fetchall()
+        ]
+    return {
+        "total": total or 0,
+        "media_horas": round(media_h, 2) if media_h is not None else None,
+        "min_horas": round(min_h, 2) if min_h is not None else None,
+        "max_horas": round(max_h, 2) if max_h is not None else None,
+        "top_produtos": top,
+    }

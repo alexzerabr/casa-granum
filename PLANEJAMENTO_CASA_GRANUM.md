@@ -282,6 +282,13 @@ produto.
 - Badge "↓ sugere reduzir" no card e no modal de Nova remessa; preço sugerido
   tinge em verde (`good`) em vez de cobre.
 
+**2026-05-17 — Round 4 (threshold ajustável)**
+- `RemessaCreate.alerta_threshold_pct` opcional (0 < x < 1); persistência por
+  linha em vez de só o default do `.env`.
+- Modal de Nova remessa expõe campo "% consumido → alerta" em `<details>`
+  recolhido. Conversão automática: input em % consumido, persistência em %
+  restante.
+
 **Round anterior**
 - Histerese de 5pp para `alerta_preco → ativa` (evita oscilação na borda).
 - Substituição de `window.prompt/confirm/alert` por modais (`ConfirmDialog`) e
@@ -467,7 +474,6 @@ Ver [`README.md`](./README.md) para o passo-a-passo. Resumo:
 Backlog priorizado de melhorias (não bloqueante para uso atual):
 
 ### Remessas — P2
-- `#13` Threshold ajustável por remessa via UI (campo opcional no Nova remessa)
 - `#9` Cache curto (15-30 s) em `vendas_acumuladas` se notar lentidão
 
 ### Remessas — P3

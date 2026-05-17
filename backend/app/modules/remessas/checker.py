@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 # Mesmo cooldown do monitor de reabastecimento, pelos mesmos motivos.
 NOTIFICATION_COOLDOWN = timedelta(hours=24)
 
+# Histerese para reverter alerta_preco → ativa: só volta quando consumo cair
+# 5pp abaixo do limiar de alerta. Evita oscilação se ficar exatamente na borda.
+HISTERESE_REVERSAO = 0.05
+
 
 def _notificou_recentemente(notificada_em: str | None, agora: datetime) -> bool:
     if not notificada_em:
@@ -39,11 +43,14 @@ async def executar_verificacao() -> dict:
     novos_alertas = 0
     silenciados = 0
     concluidas = 0
+    revertidas = 0
 
     for r in ativas:
         # 1) Detectar mudança de preço → conclui.
+        # Comparação por centavos: diferenças sub-centavo são ruído de FP, não
+        # mudança real de preço.
         preco_agora = nutify.preco_venda_atual(r["pro_cod"])
-        if preco_agora is not None and abs(preco_agora - float(r["preco_antigo"])) > 1e-6:
+        if preco_agora is not None and round(preco_agora, 2) != round(float(r["preco_antigo"]), 2):
             await repository.concluir(r["id"], preco_agora)
             concluidas += 1
             continue
@@ -57,7 +64,8 @@ async def executar_verificacao() -> dict:
         consumo_pct = min(vendido / estoque_antigo, 1.0)
         threshold = float(r["alerta_threshold_pct"])
 
-        if consumo_pct >= (1.0 - threshold) and r["estado"] == "ativa":
+        gatilho = 1.0 - threshold
+        if consumo_pct >= gatilho and r["estado"] == "ativa":
             deve_notificar = not _notificou_recentemente(r.get("notificada_em"), agora)
             await repository.marcar_alerta(r["id"], notificada=deve_notificar)
             if deve_notificar:
@@ -68,19 +76,28 @@ async def executar_verificacao() -> dict:
                     logger.exception("falha ao enviar alerta Telegram da remessa %s", r["id"])
             else:
                 silenciados += 1
+        elif (
+            r["estado"] == "alerta_preco"
+            and consumo_pct < gatilho - HISTERESE_REVERSAO
+        ):
+            # Consumo caiu (ex: devolução, entrada extra no estoque) — volta pra ativa.
+            await repository.reverter_alerta(r["id"])
+            revertidas += 1
 
     sumario = {
         "verificadas": len(ativas),
         "novos_alertas": novos_alertas,
         "silenciados": silenciados,
         "concluidas_auto": concluidas,
+        "revertidas": revertidas,
         "executado_em": agora.isoformat(),
     }
     logger.info(
-        "remessas: verificadas=%d novos_alertas=%d silenciados=%d concluidas=%d",
+        "remessas: verificadas=%d novos_alertas=%d silenciados=%d concluidas=%d revertidas=%d",
         len(ativas),
         novos_alertas,
         silenciados,
         concluidas,
+        revertidas,
     )
     return sumario

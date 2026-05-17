@@ -68,6 +68,16 @@ export default function RemessasPage() {
     return () => clearInterval(id);
   }, [recarregar, temAlerta]);
 
+  useEffect(() => {
+    const es = new EventSource("/api/remessas/stream");
+    es.addEventListener("tick", () => void recarregar());
+    es.addEventListener("erro", () => void recarregar());
+    es.onerror = () => {
+      // EventSource reconecta sozinho; polling cobre o gap. Sem ação.
+    };
+    return () => es.close();
+  }, [recarregar]);
+
   const ativas = remessas.filter(
     (r) => r.estado === "ativa" || r.estado === "alerta_preco",
   );

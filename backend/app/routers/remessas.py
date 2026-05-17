@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import sqlite3
 from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.db import firebird as fb
-from app.modules.remessas import checker, health, nutify, pricing, repository
+from app.modules.remessas import checker, events, health, nutify, pricing, repository
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/remessas", tags=["remessas"])
@@ -219,6 +221,39 @@ async def concluir_manual(remessa_id: int) -> Remessa:
 @router.post("/run")
 async def run_manual() -> dict:
     return await health.executar(checker.executar_verificacao, origem="manual")
+
+
+@router.get("/stream")
+async def stream() -> StreamingResponse:
+    """Server-Sent Events — emite `tick` ao fim de cada ciclo do checker.
+
+    Heartbeat a cada 20 s mantém a conexão viva atrás de proxies (Cloudflare
+    desconecta sem tráfego ~100 s). Frontend mantém polling em paralelo como
+    fallback caso a stream caia.
+    """
+
+    async def gen():
+        q = events.subscribe()
+        try:
+            yield ": connected\n\n"
+            while True:
+                try:
+                    evt = await asyncio.wait_for(q.get(), timeout=20.0)
+                    yield f"event: {evt['tipo']}\ndata: {json.dumps(evt)}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": heartbeat\n\n"
+        finally:
+            events.unsubscribe(q)
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @router.get("/metricas")

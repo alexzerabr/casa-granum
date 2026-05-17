@@ -7,6 +7,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable
 
+from app.modules.remessas import events
+
 logger = logging.getLogger(__name__)
 
 _lock = asyncio.Lock()
@@ -39,6 +41,14 @@ async def executar(fn: Callable[[], Awaitable[dict]], origem: str) -> dict:
             _ultima_execucao = datetime.now(timezone.utc)
             _ultimo_sumario = sumario
             _ultimo_erro = None
+            events.publish(
+                {
+                    "tipo": "tick",
+                    "origem": origem,
+                    "em": _ultima_execucao.isoformat(),
+                    "sumario": sumario,
+                }
+            )
             return sumario
         except Exception as e:
             _ultima_execucao = datetime.now(timezone.utc)
@@ -47,6 +57,7 @@ async def executar(fn: Callable[[], Awaitable[dict]], origem: str) -> dict:
                 "tipo": type(e).__name__,
                 "mensagem": str(e)[:500],
             }
+            events.publish({"tipo": "erro", "em": _ultima_execucao.isoformat(), "erro": _ultimo_erro})
             raise
         finally:
             _iniciado_em = None

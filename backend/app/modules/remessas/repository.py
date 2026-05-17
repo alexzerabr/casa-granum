@@ -144,3 +144,16 @@ async def remover(remessa_id: int) -> None:
     async with aiosqlite.connect(settings.sqlite_path) as db:
         await db.execute("DELETE FROM remessas WHERE id = ?", (remessa_id,))
         await db.commit()
+
+
+async def contagem_por_estado() -> dict[str, int]:
+    """Quantas remessas existem em cada estado. Estados ausentes retornam 0."""
+    estados = ("ativa", "alerta_preco", "concluida", "cancelada")
+    async with aiosqlite.connect(settings.sqlite_path) as db:
+        cur = await db.execute(
+            "SELECT estado, COUNT(*) FROM remessas GROUP BY estado"
+        )
+        rows = await cur.fetchall()
+    base = {e: 0 for e in estados}
+    base.update({estado: total for estado, total in rows})
+    return base

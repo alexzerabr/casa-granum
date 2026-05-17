@@ -84,3 +84,11 @@ def stop_scheduler() -> None:
         _scheduler.shutdown(wait=False)
         _scheduler = None
         logger.info("scheduler encerrado")
+
+
+def proxima_execucao(job_id: str) -> datetime | None:
+    """Próximo `next_run_time` agendado pra um job; None se scheduler/job ausente."""
+    if _scheduler is None:
+        return None
+    job = _scheduler.get_job(job_id)
+    return job.next_run_time if job else None

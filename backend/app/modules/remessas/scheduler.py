@@ -8,14 +8,14 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from app.config import settings
-from app.modules.remessas import checker
+from app.modules.remessas import checker, health
 
 logger = logging.getLogger(__name__)
 
 
 async def _job_remessas() -> None:
     try:
-        await checker.executar_verificacao()
+        await health.executar(checker.executar_verificacao, origem="auto")
     except Exception:
         logger.exception("falha na execução do checker de remessas")
 

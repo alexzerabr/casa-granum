@@ -12,7 +12,8 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.config import settings
-from app.modules.remessas import checker, nutify, pricing, repository
+from app.db import firebird as fb
+from app.modules.remessas import checker, health, nutify, pricing, repository
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/remessas", tags=["remessas"])
@@ -217,7 +218,41 @@ async def concluir_manual(remessa_id: int) -> Remessa:
 
 @router.post("/run")
 async def run_manual() -> dict:
-    return await checker.executar_verificacao()
+    return await health.executar(checker.executar_verificacao, origem="manual")
+
+
+@router.get("/saude")
+async def saude() -> dict:
+    """Snapshot pra observabilidade — scheduler, contagens, dependências externas."""
+    from app.modules.monitor import scheduler as global_scheduler
+
+    proxima = global_scheduler.proxima_execucao("remessas_checker")
+    contagens = await repository.contagem_por_estado()
+
+    # Firebird: latência medida; erro vai pro `ok=False` em vez de quebrar o endpoint.
+    fb_status: dict
+    inicio = datetime.now(timezone.utc)
+    try:
+        await asyncio.to_thread(fb.ping)
+        fb_status = {
+            "ok": True,
+            "latencia_ms": int((datetime.now(timezone.utc) - inicio).total_seconds() * 1000),
+        }
+    except Exception as e:
+        fb_status = {"ok": False, "erro": f"{type(e).__name__}: {str(e)[:200]}"}
+
+    return {
+        "checker": {
+            **health.estado(),
+            "intervalo_minutos": settings.remessa_check_minutes,
+            "proxima_execucao": proxima.isoformat() if proxima else None,
+        },
+        "remessas": contagens,
+        "dependencias": {
+            "firebird": fb_status,
+            "telegram_configurado": bool(settings.telegram_bot_token and settings.telegram_chat_id),
+        },
+    }
 
 
 @router.delete("/historico")

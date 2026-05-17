@@ -52,6 +52,8 @@ class PreviewPrecoOut(BaseModel):
 class RemessaCreate(BaseModel):
     pro_cod: int
     novo_custo: float = Field(gt=0)
+    # Override opcional do limiar de alerta (% restante). Default vem do .env.
+    alerta_threshold_pct: float | None = Field(default=None, gt=0, lt=1)
 
 
 class RemessaCancelar(BaseModel):
@@ -166,7 +168,7 @@ async def criar(req: RemessaCreate) -> Remessa:
         "markup_pct": snap["markup_pct"],
         "custo_novo": req.novo_custo,
         "preco_sugerido": preco_sugerido,
-        "alerta_threshold_pct": settings.stock_preco_alert_pct,
+        "alerta_threshold_pct": req.alerta_threshold_pct or settings.stock_preco_alert_pct,
         "vendas_baseline": baseline,
     }
     # INSERT cego — UNIQUE INDEX uq_remessa_ativa_por_produto resolve corrida

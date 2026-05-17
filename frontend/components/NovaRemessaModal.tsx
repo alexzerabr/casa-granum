@@ -23,6 +23,7 @@ export function NovaRemessaModal({ onClose, onCriado }: Props) {
   const [resultados, setResultados] = useState<ProdutoBusca[]>([]);
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [novoCusto, setNovoCusto] = useState<string>("");
+  const [consumoAlerta, setConsumoAlerta] = useState<string>("");
   const [precoSugerido, setPrecoSugerido] = useState<number | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -89,18 +90,35 @@ export function NovaRemessaModal({ onClose, onCriado }: Props) {
   const voltar = () => {
     setSnap(null);
     setNovoCusto("");
+    setConsumoAlerta("");
     setPrecoSugerido(null);
     setErro(null);
   };
+
+  const consumoAlertaNum = (() => {
+    if (!consumoAlerta.trim()) return null;
+    const v = parseFloat(consumoAlerta.replace(",", "."));
+    return isFinite(v) ? v : NaN;
+  })();
+  const consumoAlertaValido =
+    consumoAlertaNum === null ||
+    (Number.isFinite(consumoAlertaNum) &&
+      consumoAlertaNum >= 1 &&
+      consumoAlertaNum < 100);
 
   const confirmar = async () => {
     if (!snap) return;
     const custo = parseFloat(novoCusto.replace(",", "."));
     if (!isFinite(custo) || custo <= 0) return;
+    if (!consumoAlertaValido) return;
+    const threshold =
+      consumoAlertaNum !== null && Number.isFinite(consumoAlertaNum)
+        ? +(1 - consumoAlertaNum / 100).toFixed(4)
+        : undefined;
     setSalvando(true);
     setErro(null);
     try {
-      await criarRemessa(snap.pro_cod, custo);
+      await criarRemessa(snap.pro_cod, custo, threshold);
       await onCriado();
     } catch (err) {
       setErro(err instanceof Error ? err.message : "Erro ao criar remessa");
@@ -214,6 +232,35 @@ export function NovaRemessaModal({ onClose, onCriado }: Props) {
               autoFocus
             />
 
+            <details className="mt-3 text-sm">
+              <summary className="cursor-pointer select-none text-xs text-inkmuted hover:text-ink">
+                Avançado — limite de consumo para alertar
+              </summary>
+              <div className="mt-2 flex items-center gap-2">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={consumoAlerta}
+                  onChange={(e) =>
+                    setConsumoAlerta(e.target.value.replace(/[^\d.,]/g, ""))
+                  }
+                  placeholder="80"
+                  className="text-input max-w-[7rem]"
+                  aria-label="Alertar quando consumir X% do estoque antigo"
+                  aria-invalid={!consumoAlertaValido}
+                />
+                <span className="text-sm text-inkdim">% consumido → alerta</span>
+              </div>
+              {!consumoAlertaValido && (
+                <p className="mt-1 text-xs text-danger">
+                  Use um valor entre 1 e 99.
+                </p>
+              )}
+              <p className="mt-1 text-xs text-inkmuted">
+                Em branco usa o padrão configurado no servidor.
+              </p>
+            </details>
+
             {precoSugerido !== null && (() => {
               const custo = parseFloat(novoCusto.replace(",", "."));
               const reduziu = isFinite(custo) && custo < snap.custo_atual;
@@ -257,7 +304,7 @@ export function NovaRemessaModal({ onClose, onCriado }: Props) {
               <button
                 type="button"
                 onClick={confirmar}
-                disabled={!custoValido || salvando}
+                disabled={!custoValido || !consumoAlertaValido || salvando}
                 className="btn btn-primary"
               >
                 {salvando ? "Salvando…" : "Iniciar controle de remessa"}

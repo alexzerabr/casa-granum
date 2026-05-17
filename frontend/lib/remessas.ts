@@ -76,11 +76,21 @@ export function listarRemessas(estado?: EstadoRemessa): Promise<Remessa[]> {
   return apiFetch<Remessa[]>(`/remessas${qs}`);
 }
 
-export function criarRemessa(proCod: number, novoCusto: number): Promise<Remessa> {
+export function criarRemessa(
+  proCod: number,
+  novoCusto: number,
+  alertaThresholdPct?: number,
+): Promise<Remessa> {
   return apiFetch<Remessa>("/remessas", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ pro_cod: proCod, novo_custo: novoCusto }),
+    body: JSON.stringify({
+      pro_cod: proCod,
+      novo_custo: novoCusto,
+      ...(alertaThresholdPct !== undefined
+        ? { alerta_threshold_pct: alertaThresholdPct }
+        : {}),
+    }),
   });
 }
 

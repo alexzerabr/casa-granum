@@ -301,6 +301,13 @@ produto.
 - Frontend escuta `tick` via `EventSource` em paralelo ao polling (que
   segue como fallback).
 
+**2026-05-17 — Round 6 (cache vendas_acumuladas)**
+- `nutify.vendas_acumuladas_cached` com TTL 15s (dict + threading.Lock,
+  sem dependência nova). Aplicado em `_enriquecer` (GET /remessas) e
+  `checker.executar_verificacao`. `criar()` e migração ficam com a versão
+  direta (baseline precisa ser exato no momento).
+- Speedup observado: miss=103ms vs hit~0ms.
+
 **Round anterior**
 - Histerese de 5pp para `alerta_preco → ativa` (evita oscilação na borda).
 - Substituição de `window.prompt/confirm/alert` por modais (`ConfirmDialog`) e
@@ -486,7 +493,7 @@ Ver [`README.md`](./README.md) para o passo-a-passo. Resumo:
 Backlog priorizado de melhorias (não bloqueante para uso atual):
 
 ### Remessas — P2
-- `#9` Cache curto (15-30 s) em `vendas_acumuladas` se notar lentidão
+*(esvaziado — todos concluídos)*
 
 ### Remessas — P3
 - ~~`#11` Alerta de consumo lento (overstock)~~ — fora do escopo do negócio

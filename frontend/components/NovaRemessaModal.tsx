@@ -61,7 +61,7 @@ export function NovaRemessaModal({ onClose, onCriado }: Props) {
     }
     const handler = setTimeout(async () => {
       try {
-        const r = await previewPreco(custo, snap.markup_pct);
+        const r = await previewPreco(custo, snap.markup_pct, snap.custo_atual);
         setPrecoSugerido(r.preco_sugerido);
       } catch {
         setPrecoSugerido(null);
@@ -214,17 +214,30 @@ export function NovaRemessaModal({ onClose, onCriado }: Props) {
               autoFocus
             />
 
-            {precoSugerido !== null && (
-              <p className="mt-3 rounded-md border border-copper bg-cream px-3 py-2 text-sm">
-                Preço sugerido:{" "}
-                <span className="font-semibold text-copper">
-                  {formatarReais(precoSugerido)}
-                </span>
-                <span className="ml-1 text-xs text-inkdim">
-                  (mantém markup atual de {snap.markup_pct.toFixed(2)}%)
-                </span>
-              </p>
-            )}
+            {precoSugerido !== null && (() => {
+              const custo = parseFloat(novoCusto.replace(",", "."));
+              const reduziu = isFinite(custo) && custo < snap.custo_atual;
+              return (
+                <p
+                  className={`mt-3 rounded-md border bg-cream px-3 py-2 text-sm ${
+                    reduziu ? "border-good" : "border-copper"
+                  }`}
+                >
+                  Preço sugerido:{" "}
+                  <span className={`font-semibold ${reduziu ? "text-good" : "text-copper"}`}>
+                    {formatarReais(precoSugerido)}
+                  </span>
+                  {reduziu && (
+                    <span className="ml-2 inline-flex items-center rounded-full bg-goodsoft px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wider text-good">
+                      ↓ sugere reduzir
+                    </span>
+                  )}
+                  <span className="ml-1 text-xs text-inkdim">
+                    (mantém markup atual de {snap.markup_pct.toFixed(2)}%)
+                  </span>
+                </p>
+              );
+            })()}
 
             {erro && (
               <p className="mt-3 text-sm text-danger" role="alert">

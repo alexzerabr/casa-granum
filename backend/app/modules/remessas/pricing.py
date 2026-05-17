@@ -19,7 +19,31 @@ def arredondar_par_01(valor: float) -> float:
     return round(candidato + 0.01, 2)
 
 
-def sugerir_preco(novo_custo: float, markup_pct: float) -> float:
-    """Mantém o markup atual do produto sobre o novo custo, arredondado pra par+0,01."""
+def arredondar_par_01_baixo(valor: float) -> float:
+    """Anterior número par+0,01 ≤ valor (sempre pra baixo).
+
+    Usado quando o custo cai — a sugestão de preço acompanha a redução.
+    Exemplos: 87.50 → 86.01 · 88.00 → 86.01 · 88.50 → 88.01 ·
+              110.41 → 110.01 · 89.50 → 88.01.
+    """
+    base = math.floor(valor)
+    candidato = base if base % 2 == 0 else base - 1
+    if valor < candidato + 0.01 - 1e-9:
+        candidato -= 2
+    return round(candidato + 0.01, 2)
+
+
+def sugerir_preco(
+    novo_custo: float,
+    markup_pct: float,
+    custo_antigo: float | None = None,
+) -> float:
+    """Aplica markup sobre o novo custo. Direção de arredondamento segue a do custo.
+
+    Se `custo_antigo` é informado e `novo_custo < custo_antigo`, arredonda pra baixo —
+    reflete a intenção real de baixar o preço quando a mercadoria veio mais barata.
+    """
     bruto = novo_custo * (1 + markup_pct / 100)
+    if custo_antigo is not None and novo_custo < custo_antigo:
+        return arredondar_par_01_baixo(bruto)
     return arredondar_par_01(bruto)

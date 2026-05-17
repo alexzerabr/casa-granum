@@ -42,6 +42,7 @@ class Snapshot(BaseModel):
 class PreviewPrecoIn(BaseModel):
     novo_custo: float = Field(gt=0)
     markup_pct: float = Field(ge=0)
+    custo_antigo: float | None = Field(default=None, gt=0)
 
 
 class PreviewPrecoOut(BaseModel):
@@ -125,7 +126,9 @@ async def snapshot_produto(pro_cod: int) -> Snapshot:
 @router.post("/preview-preco", response_model=PreviewPrecoOut)
 def preview_preco(req: PreviewPrecoIn) -> PreviewPrecoOut:
     return PreviewPrecoOut(
-        preco_sugerido=pricing.sugerir_preco(req.novo_custo, req.markup_pct)
+        preco_sugerido=pricing.sugerir_preco(
+            req.novo_custo, req.markup_pct, req.custo_antigo
+        )
     )
 
 
@@ -150,7 +153,9 @@ async def criar(req: RemessaCreate) -> Remessa:
             detail="produto fora da pauta padrão (PTA=1) — configure preço/markup no Nutify primeiro",
         )
     baseline = await asyncio.to_thread(nutify.vendas_acumuladas, req.pro_cod)
-    preco_sugerido = pricing.sugerir_preco(req.novo_custo, snap["markup_pct"])
+    preco_sugerido = pricing.sugerir_preco(
+        req.novo_custo, snap["markup_pct"], snap["custo_atual"]
+    )
     data = {
         "pro_cod": snap["pro_cod"],
         "pro_des": snap["pro_des"],

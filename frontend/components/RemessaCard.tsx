@@ -57,6 +57,7 @@ export function RemessaCard({ remessa, onCancelar, onConcluir, onApagar }: Props
   const marcaAlerta = (1 - remessa.alerta_threshold_pct) * 100;
   const cor = corBarra(consumo, remessa.alerta_threshold_pct, remessa.estado);
   const rotulo = rotuloEstado(remessa.estado);
+  const custoReduziu = remessa.custo_novo < remessa.custo_antigo;
 
   return (
     <li className="rounded-md border border-wheat bg-cream p-4 transition-colors hover:border-copper">
@@ -69,6 +70,14 @@ export function RemessaCard({ remessa, onCancelar, onConcluir, onApagar }: Props
             >
               {rotulo.label}
             </span>
+            {ativa && custoReduziu && (
+              <span
+                className="rounded-full bg-goodsoft px-2 py-0.5 text-[0.7rem] font-semibold uppercase tracking-wider text-good"
+                title="Custo caiu — sugestão é reduzir o preço"
+              >
+                ↓ sugere reduzir
+              </span>
+            )}
           </div>
           <p className="mt-1 text-xs text-inkdim">
             Unidade <span className="font-semibold tracking-wider text-copper">{remessa.unidade}</span>
@@ -138,7 +147,7 @@ export function RemessaCard({ remessa, onCancelar, onConcluir, onApagar }: Props
                 {formatarReais(remessa.preco_antigo)}
               </span>{" "}
               · sugerido{" "}
-              <span className="font-semibold text-copper">
+              <span className={`font-semibold ${custoReduziu ? "text-good" : "text-copper"}`}>
                 {formatarReais(remessa.preco_sugerido)}
               </span>
             </p>

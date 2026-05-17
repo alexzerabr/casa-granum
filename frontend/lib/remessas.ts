@@ -55,11 +55,19 @@ export function snapshotProduto(proCod: number): Promise<Snapshot> {
   return apiFetch<Snapshot>(`/remessas/produtos/${proCod}/snapshot`);
 }
 
-export function previewPreco(novoCusto: number, markupPct: number): Promise<{ preco_sugerido: number }> {
+export function previewPreco(
+  novoCusto: number,
+  markupPct: number,
+  custoAntigo?: number,
+): Promise<{ preco_sugerido: number }> {
   return apiFetch("/remessas/preview-preco", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ novo_custo: novoCusto, markup_pct: markupPct }),
+    body: JSON.stringify({
+      novo_custo: novoCusto,
+      markup_pct: markupPct,
+      ...(custoAntigo !== undefined ? { custo_antigo: custoAntigo } : {}),
+    }),
   });
 }
 

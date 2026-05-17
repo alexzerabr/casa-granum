@@ -77,7 +77,7 @@ async def listar(
     ate: date | None = Query(default=None),
     grupo: str | None = Query(default=None, max_length=80),
     q: str | None = Query(default=None, max_length=80),
-    limite: int = Query(default=50, ge=1, le=200),
+    limite: int = Query(default=50, ge=1, le=100_000),
     ordem: Ordem | None = Query(default=None),
     dir: Direcao = Query(default="desc"),
 ) -> RankResposta:
@@ -109,7 +109,7 @@ async def exportar_csv(
     ate: date | None = Query(default=None),
     grupo: str | None = Query(default=None, max_length=80),
     q: str | None = Query(default=None, max_length=80),
-    limite: int = Query(default=200, ge=1, le=1000),
+    limite: int = Query(default=200, ge=1, le=100_000),
     ordem: Ordem | None = Query(default=None),
     dir: Direcao = Query(default="desc"),
 ):

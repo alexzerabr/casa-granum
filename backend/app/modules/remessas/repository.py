@@ -102,6 +102,16 @@ async def marcar_notificada(remessa_id: int) -> None:
         await db.commit()
 
 
+async def reverter_alerta(remessa_id: int) -> None:
+    """Volta de alerta_preco → ativa. Preserva alertada_em (histórico)."""
+    async with aiosqlite.connect(settings.sqlite_path) as db:
+        await db.execute(
+            "UPDATE remessas SET estado='ativa' WHERE id=? AND estado='alerta_preco'",
+            (remessa_id,),
+        )
+        await db.commit()
+
+
 async def concluir(remessa_id: int, preco_final: float) -> None:
     async with aiosqlite.connect(settings.sqlite_path) as db:
         await db.execute(
@@ -128,3 +138,9 @@ async def limpar_historico() -> int:
         )
         await db.commit()
         return cur.rowcount or 0
+
+
+async def remover(remessa_id: int) -> None:
+    async with aiosqlite.connect(settings.sqlite_path) as db:
+        await db.execute("DELETE FROM remessas WHERE id = ?", (remessa_id,))
+        await db.commit()

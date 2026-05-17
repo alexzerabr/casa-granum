@@ -74,6 +74,8 @@ def snapshot_produto(pro_cod: int) -> Optional[dict]:
         if not row:
             return None
         des, und, qtd, vlc, emn, vlr, prc = row
+        # tem_pauta=False quando o LEFT JOIN com PAUTAPRODUTO não retorna linha
+        # (produto fora da pauta padrão PTA=1). Sem isso, preço/markup viriam 0.
         return {
             "pro_cod": pro_cod,
             "pro_des": des,
@@ -83,6 +85,7 @@ def snapshot_produto(pro_cod: int) -> Optional[dict]:
             "custo_atual": float(vlc or 0),
             "preco_atual": float(vlr or 0),
             "markup_pct": float(prc or 0),
+            "tem_pauta": vlr is not None and prc is not None,
         }
 
 

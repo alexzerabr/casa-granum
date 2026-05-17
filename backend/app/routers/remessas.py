@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sqlite3
 from datetime import datetime, timezone
 from typing import Literal
 
@@ -34,6 +35,7 @@ class Snapshot(BaseModel):
     custo_atual: float
     preco_atual: float
     markup_pct: float
+    tem_pauta: bool
     tem_remessa_ativa: bool
 
 
@@ -139,14 +141,14 @@ async def listar(
 
 @router.post("", response_model=Remessa, status_code=201)
 async def criar(req: RemessaCreate) -> Remessa:
-    if await repository.tem_ativa(req.pro_cod):
-        raise HTTPException(
-            status_code=409,
-            detail="já existe remessa ativa para este produto — encerre antes de iniciar outra",
-        )
     snap = await asyncio.to_thread(nutify.snapshot_produto, req.pro_cod)
     if snap is None:
         raise HTTPException(status_code=404, detail="produto não monitorável")
+    if not snap["tem_pauta"] or snap["markup_pct"] <= 0:
+        raise HTTPException(
+            status_code=422,
+            detail="produto fora da pauta padrão (PTA=1) — configure preço/markup no Nutify primeiro",
+        )
     baseline = await asyncio.to_thread(nutify.vendas_acumuladas, req.pro_cod)
     preco_sugerido = pricing.sugerir_preco(req.novo_custo, snap["markup_pct"])
     data = {
@@ -162,7 +164,15 @@ async def criar(req: RemessaCreate) -> Remessa:
         "alerta_threshold_pct": settings.stock_preco_alert_pct,
         "vendas_baseline": baseline,
     }
-    novo_id = await repository.criar(data)
+    # INSERT cego — UNIQUE INDEX uq_remessa_ativa_por_produto resolve corrida
+    # entre duas requests simultâneas; o check-then-insert anterior tinha janela.
+    try:
+        novo_id = await repository.criar(data)
+    except sqlite3.IntegrityError:
+        raise HTTPException(
+            status_code=409,
+            detail="já existe remessa ativa para este produto — encerre antes de iniciar outra",
+        )
     criada = await repository.obter(novo_id)
     assert criada is not None
     enriquecida = await _enriquecer(criada)
@@ -207,3 +217,17 @@ async def run_manual() -> dict:
 async def limpar_historico() -> dict:
     removidas = await repository.limpar_historico()
     return {"removidas": removidas}
+
+
+@router.delete("/{remessa_id}")
+async def remover(remessa_id: int) -> dict:
+    atual = await repository.obter(remessa_id)
+    if atual is None:
+        raise HTTPException(status_code=404, detail="remessa não encontrada")
+    if atual["estado"] not in ("concluida", "cancelada"):
+        raise HTTPException(
+            status_code=409,
+            detail="só é possível apagar remessas concluídas ou canceladas — cancele antes",
+        )
+    await repository.remover(remessa_id)
+    return {"removida": True}

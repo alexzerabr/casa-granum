@@ -35,16 +35,19 @@ body {
 }
 
 /* Editorial label utility — uppercase tracked caption.
-   No default color: each use chooses (text-inkdim on cream, text-cream/x on forest, etc.) */
-.label {
-  font-family: var(--font-sans), sans-serif;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 0.7rem;
-}
-.label:not([class*="text-"]) {
-  color: var(--color-inkdim);
+   Cor padrão é inkdim; em fundos escuros, sobreponha com text-cream/x via Tailwind.
+   Em @layer components pra que utilities `text-*` (em @layer utilities) vençam normalmente
+   — o antigo seletor :not([class*="text-"]) quebrava em usos como `label text-[0.6rem]`,
+   onde text-[0.6rem] é apenas tamanho mas casava o :not e zerava a cor. */
+@layer components {
+  .label {
+    font-family: var(--font-sans), sans-serif;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-size: 0.7rem;
+    color: var(--color-inkdim);
+  }
 }
 
 /* Numeral display — tabular for visual rhythm */

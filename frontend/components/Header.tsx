@@ -1,8 +1,12 @@
 "use client";
 
+import { Activity } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
+import { SaudeModal } from "@/components/SaudeModal";
+import { useSaude, type StatusSaude } from "@/lib/useSaude";
 import { useScanStatus } from "@/lib/useScanStatus";
 
 const tabs = [
@@ -17,6 +21,8 @@ export function Header() {
   const pathname = usePathname();
   const status = useScanStatus();
   const varrendo = status?.em_execucao ?? false;
+  const { saude, status: saudeStatus } = useSaude();
+  const [saudeAberta, setSaudeAberta] = useState(false);
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -63,7 +69,7 @@ export function Header() {
           )}
         </div>
 
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-4 sm:gap-6">
           {varrendo && (
             <span
               role="status"
@@ -112,8 +118,73 @@ export function Header() {
               );
             })}
           </nav>
+
+          <BotaoSaude
+            status={saudeStatus}
+            descricao={descreverSaude(saudeStatus, saude)}
+            onClick={() => setSaudeAberta(true)}
+          />
         </div>
       </div>
+      {saudeAberta && <SaudeModal onClose={() => setSaudeAberta(false)} />}
     </header>
   );
+}
+
+function BotaoSaude({
+  status,
+  descricao,
+  onClick,
+}: {
+  status: StatusSaude;
+  descricao: string;
+  onClick: () => void;
+}) {
+  // Pulsing dot sobreposto ao ícone. Cores fixas: independem do tema da página.
+  const cores: Record<StatusSaude, { dot: string; ring: string }> = {
+    verde: { dot: "bg-emerald-400", ring: "bg-emerald-400/60" },
+    amarelo: { dot: "bg-amber-400", ring: "bg-amber-400/60" },
+    vermelho: { dot: "bg-rose-500", ring: "bg-rose-500/60" },
+    indeterminado: { dot: "bg-cream/40", ring: "bg-cream/30" },
+  };
+  const { dot, ring } = cores[status];
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={descricao}
+      aria-label={descricao}
+      className="relative shrink-0 rounded-full border border-cream/25 bg-cream/10 p-1.5 text-cream/85 transition-colors hover:bg-cream/20 hover:text-cream"
+    >
+      <Activity className="h-4 w-4" strokeWidth={2.25} />
+      <span
+        aria-hidden
+        className="absolute right-0.5 top-0.5 flex h-2 w-2"
+      >
+        {status === "vermelho" && (
+          <span
+            className={`absolute inline-flex h-full w-full animate-ping rounded-full ${ring}`}
+          />
+        )}
+        <span
+          className={`relative inline-flex h-2 w-2 rounded-full ring-2 ring-forest ${dot}`}
+        />
+      </span>
+    </button>
+  );
+}
+
+function descreverSaude(status: StatusSaude, saude: ReturnType<typeof useSaude>["saude"]): string {
+  if (status === "indeterminado") return "Verificando estado do sistema…";
+  if (status === "vermelho") {
+    const erro = saude?.dependencias.firebird.erro || "Firebird inacessível";
+    return `Falha de comunicação: ${erro}`;
+  }
+  if (status === "amarelo") {
+    const erro = saude?.checker.ultimo_erro;
+    return erro
+      ? `Atenção · último ciclo falhou (${erro.tipo})`
+      : "Atenção · verifique detalhes";
+  }
+  return "Sistema operando normalmente";
 }

@@ -116,6 +116,59 @@ export function removerRemessa(id: number): Promise<{ removida: boolean }> {
   return apiFetch(`/remessas/${id}`, { method: "DELETE" });
 }
 
+export interface SumarioChecker {
+  verificadas: number;
+  novos_alertas: number;
+  silenciados: number;
+  concluidas_auto: number;
+  revertidas: number;
+  executado_em: string;
+}
+
+export interface Saude {
+  checker: {
+    em_execucao: boolean;
+    iniciada_em: string | null;
+    origem_atual: string | null;
+    ultima_execucao: string | null;
+    ultimo_sumario: SumarioChecker | null;
+    ultimo_erro: { em: string; tipo: string; mensagem: string } | null;
+    intervalo_minutos: number;
+    proxima_execucao: string | null;
+  };
+  remessas: {
+    ativa: number;
+    alerta_preco: number;
+    concluida: number;
+    cancelada: number;
+  };
+  dependencias: {
+    firebird: { ok: boolean; latencia_ms?: number; erro?: string };
+    telegram_configurado: boolean;
+  };
+}
+
+export interface Metricas {
+  total: number;
+  media_horas: number | null;
+  min_horas: number | null;
+  max_horas: number | null;
+  top_produtos: {
+    pro_cod: number;
+    pro_des: string;
+    total: number;
+    media_h: number | null;
+  }[];
+}
+
+export function obterSaude(): Promise<Saude> {
+  return apiFetch<Saude>("/remessas/saude");
+}
+
+export function obterMetricas(): Promise<Metricas> {
+  return apiFetch<Metricas>("/remessas/metricas");
+}
+
 const SUFIXOS: Record<string, string> = {
   KG: "kg",
   UN: "un",

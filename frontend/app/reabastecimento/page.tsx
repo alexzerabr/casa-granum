@@ -1,9 +1,10 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, Database, RefreshCw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Database, RefreshCw, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { PedidoCompraModal } from "@/components/PedidoCompraModal";
 import { ReabastecimentoTable } from "@/components/ReabastecimentoTable";
 import { ReabastecimentoFiltros } from "@/components/ReabastecimentoFiltros";
 import {
@@ -33,6 +34,7 @@ export default function ReabastecimentoPage() {
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState<Date | null>(null);
   const [fonte, setFonte] = useState<"cache" | "ao-vivo">("cache");
   const [sumario, setSumario] = useState<SumarioVerificacao | null>(null);
+  const [mostrarPedidoCompra, setMostrarPedidoCompra] = useState(false);
   const [filtros, setFiltros] = useState<FiltrosReabastecimento>({
     ...FILTROS_VAZIOS,
     unidades: new Set<string>(),
@@ -150,26 +152,37 @@ export default function ReabastecimentoPage() {
             </div>
 
             <div className="flex flex-col items-end gap-2">
-              <button
-                type="button"
-                onClick={handleRunNow}
-                disabled={running}
-                className="btn btn-secondary"
-                aria-live="polite"
-                aria-busy={running}
-              >
-                {running ? (
-                  <>
-                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-inkmuted/30 border-t-ink" />
-                    {labelBotao}
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-4 w-4" strokeWidth={2} />
-                    {labelBotao}
-                  </>
-                )}
-              </button>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMostrarPedidoCompra(true)}
+                  className="btn btn-secondary inline-flex items-center gap-1.5"
+                  title="Gerar pedido de compra com IA (estoque baixo + pedidos abertos)"
+                >
+                  <Sparkles className="h-4 w-4" strokeWidth={2.25} />
+                  Pedido de compra (IA)
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRunNow}
+                  disabled={running}
+                  className="btn btn-secondary"
+                  aria-live="polite"
+                  aria-busy={running}
+                >
+                  {running ? (
+                    <>
+                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-inkmuted/30 border-t-ink" />
+                      {labelBotao}
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4" strokeWidth={2} />
+                      {labelBotao}
+                    </>
+                  )}
+                </button>
+              </div>
               <span className="flex items-center gap-1.5 text-xs text-inkdim tabular">
                 {fonte === "ao-vivo" && (
                   <Database
@@ -302,6 +315,10 @@ export default function ReabastecimentoPage() {
       </main>
 
       <Footer />
+
+      {mostrarPedidoCompra && (
+        <PedidoCompraModal onClose={() => setMostrarPedidoCompra(false)} />
+      )}
     </div>
   );
 }

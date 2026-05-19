@@ -149,3 +149,28 @@ export function statusVarredura(): Promise<StatusVarredura> {
     cache: "no-store",
   });
 }
+
+export type OrigemPedido = "estoque" | "cliente";
+
+export interface ItemPedidoCompra {
+  id: string;
+  origem: OrigemPedido;
+  pro_cod: number | null;
+  pro_des: string;
+  unidade: string;
+  qtd_sugerida: number;
+  clientes: string[] | null;
+}
+
+export interface PedidoCompra {
+  gerado_por: "llm" | "regra";
+  estoque_baixo: ItemPedidoCompra[];
+  solicitacoes_clientes: ItemPedidoCompra[];
+}
+
+export function gerarPedidoCompra(): Promise<PedidoCompra> {
+  return apiFetch<PedidoCompra>("/reabastecimento/pedido-compra", {
+    method: "POST",
+    cache: "no-store",
+  });
+}

@@ -9,7 +9,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.config import settings
-from app.modules.monitor import checker, scan_state
+from app.modules.monitor import checker, pedido_compra, scan_state
 
 router = APIRouter(prefix="/reabastecimento", tags=["reabastecimento"])
 
@@ -97,3 +97,13 @@ async def executar_agora() -> SumarioVerificacao:
 async def status_varredura() -> StatusVarredura:
     """Estado da varredura — frontend usa pra restaurar spinner após F5 / boot do servidor."""
     return StatusVarredura(**scan_state.estado())
+
+
+@router.post("/pedido-compra", response_model=pedido_compra.PedidoCompra)
+async def gerar_pedido_compra() -> pedido_compra.PedidoCompra:
+    """Gera pedido de compra combinando estoque baixo + pedidos abertos.
+
+    Sugestão de quantidades via LLM (Gemini) com fallback determinístico.
+    Resposta é descartável — frontend edita em preview e baixa TXT.
+    """
+    return await pedido_compra.gerar()
